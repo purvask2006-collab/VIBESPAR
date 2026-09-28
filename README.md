@@ -1,60 +1,587 @@
-# AI-Enabled Real-Time Digital Twin System for MALE UAV Aero Piston Engines
-**Smart India Hackathon (SIH) 2026 Prototype**
+# VIBESPAR
 
-This system implements an end-to-end aerospace Ground Control Station (GCS) Digital Twin pipeline for health monitoring, anomaly detection, fault classification, and Remaining Useful Life (RUL) estimation for 4-cylinder aero piston engines used in Medium-Altitude Long-Endurance (MALE) UAVs.
+## Indigenous AI-Enabled Digital Twin for MALE UAV Aero-Piston Engine Health Monitoring
+
+**Smart India Hackathon 2026 — Digital Twin / UAV Propulsion Prototype**
+
+VIBESPAR is an **indigenous real-time digital twin system for aero-piston engines used in Medium-Altitude Long-Endurance (MALE) UAVs**.
+
+It combines **engine simulation, physics-based modelling, sensor telemetry, AI/ML-based anomaly detection, fault diagnosis, Remaining Useful Life (RUL) estimation and an operational dashboard** into a single integrated system.
+
+The goal is to move UAV engine monitoring from **reactive maintenance to predictive, explainable and data-driven decision-making**.
 
 ---
 
-## 1. System Architecture Pipeline
+## Why VIBESPAR?
+
+Aero-piston engines operate under continuously changing:
+
+* RPM
+* Temperature
+* Engine load
+* Vibration
+* Fuel flow
+* Lubrication conditions
+* Cooling conditions
+
+A small abnormality can develop into a larger propulsion issue, affecting **engine efficiency, UAV endurance, mission reliability and maintenance requirements**.
+
+Traditional monitoring can show individual sensor values, but VIBESPAR attempts to answer the more important questions:
+
+> **Is the engine behaving as expected?**
+> **What is going wrong?**
+> **Why is it happening?**
+> **How serious is it?**
+> **How much useful life remains?**
+> **What maintenance action should be considered?**
+
+---
+
+# System Architecture
 
 ```text
-       ┌──────────────────────┐
-       │    Simulated ECU     │ (Engine physics, altitude air density, sensor noise, fault injection)
-       └──────────┬───────────┘
-                  │  Sensor Telemetry (RPM, CHT, EGT, Oil P, Oil T, Vibration, Fuel, Bus)
-                  ▼
-       ┌──────────────────────┐
-       │  Digital Twin Core   │ (First-principles thermodynamic baseline & expectation models)
-       └──────────┬───────────┘
-                  │  Analytical Residuals (Δ = Measured − Expected) & Subsystem Health Scores
-                  ▼
-       ┌──────────────────────┐
-       │     AI / ML Layer    │ (Isolation Forest + Physics Residual Distance + Expert Rules)
-       └──────────┬───────────┘
-                  │  Anomaly Score, Fault Classification, RUL Prognostics & Maintenance Action
-                  ▼
-       ┌──────────────────────┐
-       │ Dash GCS Dashboard   │ (Animated 4-Cylinder SVG Engine, Live Charts, GCS HUD)
-       └──────────────────────┘
+                    ┌─────────────────────────┐
+                    │       UAV ENGINE        │
+                    │   Aero-Piston Engine    │
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │     SENSOR / ECU        │
+                    │ RPM • Temperature       │
+                    │ Vibration • Fuel • Torque│
+                    └────────────┬────────────┘
+                                 │
+                          Telemetry Data
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │   DIGITAL TWIN CORE     │
+                    │ Physics-Based Engine    │
+                    │ Behaviour Model / ROM   │
+                    └────────────┬────────────┘
+                                 │
+                      Expected vs Actual
+                         Behaviour / Δ
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │      AI / ML LAYER      │
+                    │ Anomaly Detection       │
+                    │ Fault Classification    │
+                    │ Explainability          │
+                    │ RUL Estimation          │
+                    └────────────┬────────────┘
+                                 │
+                                 ▼
+                    ┌─────────────────────────┐
+                    │    VIBESPAR DASHBOARD   │
+                    │ Engine Health            │
+                    │ Fault Alerts             │
+                    │ Efficiency Trends        │
+                    │ Maintenance Advisory    │
+                    │ Mission Health Reports  │
+                    └─────────────────────────┘
 ```
 
 ---
 
-## 2. Installation & Setup
+# Core Working Principle
 
-Ensure Python 3.9+ is installed. In Windows PowerShell:
+VIBESPAR maintains a virtual representation of the physical engine.
 
-```powershell
-py -m pip install -r requirements.txt
+The digital twin continuously receives engine telemetry and compares the **actual engine behaviour** with the **expected behaviour generated by the model**.
+
+### Analytical residual
+
+```text
+Residual = Actual Behaviour − Expected Behaviour
 ```
 
-Or install individual packages:
+Large or abnormal residuals can indicate that the engine is no longer behaving normally.
 
-```powershell
-py -m pip install dash plotly pandas numpy scikit-learn
+These residuals are then combined with AI/ML analytics and engineering rules to identify potential faults.
+
+---
+
+# Major Components
+
+## 1. Engine Simulation
+
+The prototype includes a simulated engine environment representing a **4-cylinder aero-piston engine**.
+
+The simulation can generate representative telemetry such as:
+
+* RPM
+* Cylinder temperature
+* Exhaust temperature
+* Oil pressure
+* Oil temperature
+* Vibration
+* Fuel flow
+* Engine load
+* Electrical/bus parameters
+
+The simulation also supports controlled fault injection for demonstration and testing.
+
+---
+
+## 2. Digital Twin Core
+
+The Digital Twin Core establishes the expected behaviour of the engine using physics-inspired and first-principles relationships.
+
+It provides:
+
+* Expected engine parameters
+* Thermal behaviour estimation
+* Combustion-related behaviour
+* Mechanical behaviour
+* Lubrication behaviour
+* Cooling behaviour
+* Subsystem health estimation
+
+The important concept is:
+
+```text
+Physical Engine
+      ↓
+Expected Behaviour
+      ↓
+Compare With Actual Telemetry
+      ↓
+Residual / Deviation
+      ↓
+Health Assessment
 ```
 
 ---
 
-## 3. Running the Dashboard
+## 3. Reduced Order Model
 
-Launch the application:
+A **Reduced Order Model (ROM)** simplifies complex engine behaviour so that the model can operate much faster than a high-fidelity simulation.
 
-```powershell
-py dashboard_app.py
+This makes it suitable for:
+
+* Real-time monitoring
+* Lightweight computation
+* Edge deployment
+* Fast fault analysis
+* UAV onboard applications
+
+The ROM is intended to provide the bridge between detailed engineering physics and real-time digital-twin operation.
+
+---
+
+# 4. AI / ML Anomaly Detection
+
+The AI layer analyzes deviations in engine behaviour.
+
+The prototype combines:
+
+* Isolation Forest
+* Residual-based anomaly scoring
+* Engineering rules
+* Fault signatures
+* Multi-parameter analysis
+
+Instead of relying on a single sensor threshold, the system considers multiple parameters together.
+
+For example:
+
+```text
+Fuel Flow ↓
+      +
+Torque ↓
+      +
+Temperature ↑
+      +
+Vibration ↑
+      ↓
+Abnormal Engine Behaviour
+      ↓
+Fault Classification
 ```
 
-Then open your browser to:
+This enables the system to move from simply detecting an abnormal value to identifying a probable fault condition.
+
+---
+
+# 5. Fault Detection & Diagnosis
+
+The prototype supports controlled fault scenarios including:
+
+* Cooling system degradation
+* Cylinder misfire
+* Oil circuit degradation
+* Injector-related degradation
+
+The system generates:
+
+```text
+Fault
+↓
+Severity
+↓
+Affected Subsystem
+↓
+Engine Health Impact
+↓
+Recommended Action
+```
+
+---
+
+# 6. Remaining Useful Life — RUL
+
+VIBESPAR estimates the **Remaining Useful Life (RUL)** of the engine based on its simulated health and degradation behaviour.
+
+Example:
+
+```text
+Normal Condition
+RUL = 168 hours
+
+Fault Condition
+RUL = 126 hours
+```
+
+These values are representative prototype outputs and are intended to demonstrate the RUL workflow.
+
+---
+
+# 7. Operational Dashboard
+
+The VIBESPAR dashboard is designed for three primary users:
+
+### UAV Operators
+
+For:
+
+* Current engine health
+* Fault alerts
+* Mission status
+* Immediate warnings
+
+### Propulsion Engineers
+
+For:
+
+* Parameter trends
+* Engine behaviour
+* Efficiency analysis
+* Fault investigation
+
+### Maintenance Teams
+
+For:
+
+* Maintenance advisories
+* RUL
+* Mission-wise health
+* Degradation tracking
+
+### Dashboard Functions
+
+The interface provides:
+
+* **Real-time Engine Health**
+* **Fault Alerts**
+* **Engine Efficiency Trends**
+* **Maintenance Advisory**
+* **Mission-wise Health Reports**
+* **Live Telemetry**
+* **Engine Visualization**
+* **Subsystem Health**
+* **RUL Estimation**
+
+---
+
+# Indigenous Technology Approach
+
+One of VIBESPAR's major goals is to develop an **indigenous digital-twin architecture for UAV propulsion health monitoring**.
+
+The system is designed around our own:
+
+* Engine behaviour model
+* Digital-twin logic
+* Telemetry pipeline
+* Fault-injection framework
+* AI/ML diagnostic layer
+* Health scoring logic
+* RUL workflow
+* Visualization dashboard
+* Maintenance decision layer
+
+Rather than depending entirely on a proprietary digital-twin platform, VIBESPAR follows a **modular and extensible architecture** that can be adapted to different UAV propulsion systems.
+
+### Indigenous architecture
+
+```text
+Indigenous Engine Model
+        ↓
+Telemetry Processing
+        ↓
+Physics / ROM
+        ↓
+AI Diagnostics
+        ↓
+Health + RUL
+        ↓
+Maintenance Intelligence
+        ↓
+Operational Dashboard
+```
+
+---
+
+# Key USPs
+
+### 1. Physics + AI
+
+Combines expected engine behaviour from physics-based modelling with data-driven anomaly detection.
+
+### 2. Real-Time Digital Twin
+
+Maintains a continuously updated virtual representation of engine condition.
+
+### 3. Explainable Fault Detection
+
+The system uses parameter deviations and fault signatures to provide an interpretable reason for an alert.
+
+### 4. Predictive Maintenance
+
+Moves beyond simply displaying warnings by estimating degradation and supporting maintenance decisions.
+
+### 5. Lightweight Architecture
+
+The reduced-order approach is intended to make real-time and future edge deployment more practical.
+
+### 6. RAMS-Focused
+
+The system supports:
+
+**Reliability + Availability + Maintainability + Safety**
+
+### 7. Indigenous & Modular
+
+The architecture is designed to reduce dependence on proprietary digital-twin platforms and allow adaptation to different UAV engines.
+
+---
+
+# SIH Requirement Mapping
+
+| SIH Requirement           | VIBESPAR Implementation                       |
+| ------------------------- | --------------------------------------------- |
+| Functional prototype      | Working digital-twin demonstrator             |
+| Digital twin architecture | Engine → Telemetry → Physics → AI → Dashboard |
+| Engine simulation         | Simulated 4-cylinder aero-piston engine       |
+| AI/ML anomaly detection   | Isolation Forest + residual analytics         |
+| Visualization dashboard   | Real-time GCS-style dashboard                 |
+| Simulated datasets        | Simulated telemetry + fault injection         |
+| Physics-informed AI       | Physics expectations + data deviations        |
+| Edge AI                   | Lightweight/ROM-oriented architecture         |
+| Hybrid modelling          | Physics + data-driven analytics               |
+| Explainable AI            | Residual and fault-signature analysis         |
+| Maintenance advisory      | Fault → severity → action workflow            |
+| Sensor fusion             | Multi-parameter engine monitoring             |
+| Embedded systems          | ECU/telemetry architecture                    |
+| CAN communication         | Bus/telemetry architecture                    |
+| Reliability engineering   | Health scoring + RUL + RAMS                   |
+
+---
+
+# Demonstration Workflow
+
+The prototype can demonstrate the following sequence:
+
+```text
+1. Start Engine
+       ↓
+2. Normal Telemetry
+       ↓
+3. Digital Twin Predicts Expected Behaviour
+       ↓
+4. Inject Fault
+       ↓
+5. Engine Parameters Deviate
+       ↓
+6. Residuals Increase
+       ↓
+7. AI Detects Anomaly
+       ↓
+8. Fault Is Classified
+       ↓
+9. Engine Health Changes
+       ↓
+10. RUL Is Updated
+       ↓
+11. Maintenance Advisory Appears
+       ↓
+12. Mission Health Is Recorded
+```
+
+---
+
+# Example Demonstration
+
+### Normal State
+
+```text
+Engine Health: 94%
+RPM: 3200
+Vibration: Normal
+Temperature: Normal
+Fault: None
+RUL: 168 h
+```
+
+### Fault Injection
+
+```text
+Fault: Injector Clogging
+Severity: 70%
+```
+
+The system then demonstrates representative changes such as:
+
+```text
+Fuel Flow      ↓
+Torque         ↓
+Vibration      ↑
+Temperature    ↑
+Engine Health  ↓
+RUL            ↓
+```
+
+The dashboard simultaneously updates the engine visualization, telemetry, health status, fault alert and maintenance information.
+
+---
+
+# Technology Stack
+
+### Frontend
+
+* React
+* TypeScript
+* Vite
+* Tailwind CSS
+* Recharts
+* Three.js / React Three Fiber
+* Lucide React
+* Motion
+
+### Backend / Simulation
+
+* Python
+* NumPy
+* Pandas
+* Scikit-learn
+* Plotly
+* Dash
+
+### AI / ML
+
+* Isolation Forest
+* Residual-based anomaly detection
+* Engineering rules
+* Fault signatures
+* RUL estimation
+
+### Digital Twin
+
+* Physics-based engine modelling
+* Reduced Order Model approach
+* Sensor telemetry simulation
+* Fault injection
+* Health-state estimation
+
+---
+
+# Project Structure
+
+```text
+VIBESPAR/
+│
+├── src/
+│   └── Frontend / Dashboard
+│
+├── dashboard_app.py
+├── digital_twin_core.py
+├── ai_ml_layer.py
+├── simulated_ecu.py
+├── main.py
+├── requirements.txt
+│
+├── package.json
+├── vite.config.ts
+├── tsconfig.json
+├── index.html
+│
+├── .env.example
+├── .gitignore
+└── README.md
+```
+
+---
+
+# Installation
+
+## Frontend
+
+Clone the repository:
+
+```bash
+git clone https://github.com/purvask2006-collab/VIBESPAR.git
+cd VIBESPAR
+```
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Run the frontend:
+
+```bash
+npm run dev
+```
+
+The Vite development server will provide the local dashboard URL.
+
+---
+
+## Python Environment
+
+Create a Python environment:
+
+```bash
+python -m venv venv
+```
+
+Activate it on Windows:
+
+```powershell
+venv\Scripts\activate
+```
+
+Install Python dependencies:
+
+```powershell
+pip install -r requirements.txt
+```
+
+---
+
+# Running the Python Dashboard
+
+For the Python/Dash implementation:
+
+```powershell
+python dashboard_app.py
+```
+
+Then open:
 
 ```text
 http://127.0.0.1:8050
@@ -62,11 +589,109 @@ http://127.0.0.1:8050
 
 ---
 
-## 4. Key Features for SIH Presentation
+# Current Prototype Status
 
-1. **Virtual Aero Engine Visualization**: Real-time animated 4-cylinder engine schematic with reciprocating pistons, rotating crankshaft, combustion chamber glow, and cooling/lubrication channels. Animation speed is dynamically synchronized with engine RPM.
-2. **Physics-Based Residual Monitoring**: Compares live sensor telemetry against Digital Twin first-principles predictions to calculate analytical residuals ($\Delta$) across thermal, combustion, hydraulic, and mechanical axes.
-3. **Multi-Subsystem Health Breakdown**: Continuously computes 0–100% health indices for Engine Overall, Cooling System, Lubrication, Fuel, and Ignition.
-4. **AI/ML Anomaly Detection**: Real-time multi-channel anomaly scoring using normalized Mahalanobis residual distance combined with signature-based fault classification.
-5. **Fault Injection & Demo Mode**: One-click fault triggers for Cooling System Degradation, Cylinder Misfire, and Oil Circuit Degradation, plus a 4-stage automated SIH evaluation sequence.
-6. **Remaining Useful Life (RUL) Prognostics**: Estimates flight hours remaining until required maintenance, factoring in real-time wear acceleration.
+VIBESPAR is currently a **prototype / software demonstrator** using simulated engine telemetry and controlled fault injection.
+
+The current prototype demonstrates:
+
+* Digital-twin architecture
+* Simulated engine behaviour
+* Telemetry generation
+* Physics-based expected behaviour
+* Residual analysis
+* Fault injection
+* AI/ML anomaly detection
+* Health estimation
+* RUL workflow
+* Maintenance advisory
+* Real-time visualization
+
+The prototype is **not presented as a validated aerospace engine model** and does not claim certification, flight qualification or validation against production aircraft engine data.
+
+---
+
+# Future Development Roadmap
+
+### Phase 1 — Prototype
+
+* Simulated engine
+* Fault injection
+* Digital twin
+* Dashboard
+* AI anomaly detection
+
+### Phase 2 — Higher-Fidelity Modelling
+
+* Improved thermodynamic modelling
+* Combustion modelling
+* Thermal modelling
+* Mechanical dynamics
+* Validated reduced-order models
+
+### Phase 3 — Hardware Integration
+
+* Real ECU data
+* CAN / DroneCAN integration
+* Physical sensors
+* Edge computing hardware
+
+### Phase 4 — Advanced AI
+
+* Physics-informed ML
+* Improved RUL models
+* Explainable AI
+* Online learning
+* Fleet-level analytics
+
+### Phase 5 — UAV Deployment
+
+* Lightweight onboard analytics
+* Secure telemetry
+* Edge-cloud architecture
+* Fleet health monitoring
+* Mission-level predictive maintenance
+
+---
+
+# Impact
+
+VIBESPAR aims to support:
+
+### Operational Readiness
+
+Earlier identification of abnormal engine behaviour can provide operators with additional time to respond.
+
+### Economic Impact
+
+Predictive health monitoring can help reduce unnecessary maintenance and unexpected downtime.
+
+### Strategic Autonomy
+
+An indigenous and modular software architecture can reduce reliance on proprietary digital-twin platforms.
+
+### Environmental Impact
+
+Monitoring engine efficiency and degradation can support improved fuel-use decisions and potentially reduce unnecessary fuel consumption.
+
+---
+
+# Important Disclaimer
+
+> **VIBESPAR is a research and demonstration prototype. Engine parameters, fault scenarios, health scores and RUL values shown in the demonstrator may be simulated or representative. The system has not been validated for operational aerospace use, flight safety, certification or production-engine deployment.**
+
+---
+
+# Team
+
+**VIBESPAR — Smart India Hackathon 2026**
+
+Developed as an indigenous digital-twin concept for **UAV aero-piston engine health monitoring, predictive maintenance and propulsion reliability**.
+
+---
+
+## Vision
+
+> **From raw engine data to intelligent propulsion decisions.**
+
+**VIBESPAR — Indigenous • Real-Time • Explainable • Predictive**
