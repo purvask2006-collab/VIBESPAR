@@ -68,7 +68,7 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
       }`}
     >
       {/* Header */}
-      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400 mb-3">
+      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-900 dark:text-slate-100 mb-3">
         MISSION PROFILE
       </h2>
 
@@ -86,8 +86,8 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
                     ? 'border-cyan-600 bg-cyan-600 text-white shadow-sm'
                     : 'border-cyan-500 bg-cyan-950/80 text-cyan-300 shadow-[0_0_10px_rgba(6,182,212,0.3)] ring-1 ring-cyan-400'
                   : isLight
-                  ? 'border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200 hover:text-slate-800'
-                  : 'border-[#15243b] bg-[#0c1424] text-slate-400 hover:bg-[#132035] hover:text-slate-200'
+                  ? 'border-slate-200 bg-slate-100 text-slate-700 hover:bg-slate-200 hover:text-slate-900'
+                  : 'border-[#15243b] bg-[#0c1424] text-slate-300 hover:bg-[#132035] hover:text-slate-100'
               }`}
             >
               {label}
@@ -100,14 +100,14 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
       <div className="grid grid-cols-3 gap-3 mb-3">
         {/* Altitude */}
         <div>
-          <span className="text-[10px] font-chakra font-semibold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+          <span className="text-[10px] font-chakra font-bold tracking-wider text-slate-600 dark:text-slate-400 uppercase">
             ALTITUDE
           </span>
           <div className="flex items-baseline space-x-1 mt-0.5">
-            <span className="text-xl sm:text-2xl font-chakra font-extrabold text-cyan-600 dark:text-cyan-400">
+            <span className="text-xl sm:text-2xl font-chakra font-extrabold text-cyan-700 dark:text-cyan-400">
               {Math.round(altitude).toLocaleString()}
             </span>
-            <span className="text-xs font-chakra font-medium text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-chakra font-semibold text-slate-600 dark:text-slate-400">
               ft
             </span>
           </div>
@@ -115,14 +115,14 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
 
         {/* Fuel Remaining */}
         <div>
-          <span className="text-[10px] font-chakra font-semibold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+          <span className="text-[10px] font-chakra font-bold tracking-wider text-slate-600 dark:text-slate-400 uppercase">
             FUEL REM
           </span>
           <div className="flex items-baseline space-x-1 mt-0.5">
-            <span className="text-xl sm:text-2xl font-chakra font-extrabold text-slate-800 dark:text-slate-100">
+            <span className="text-xl sm:text-2xl font-chakra font-extrabold text-slate-900 dark:text-slate-100">
               {fuelRemainingL.toFixed(1)}
             </span>
-            <span className="text-xs font-chakra font-medium text-slate-500 dark:text-slate-400">
+            <span className="text-xs font-chakra font-semibold text-slate-600 dark:text-slate-400">
               L
             </span>
           </div>
@@ -130,15 +130,15 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
 
         {/* Endurance */}
         <div>
-          <span className="text-[10px] font-chakra font-semibold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+          <span className="text-[10px] font-chakra font-bold tracking-wider text-slate-600 dark:text-slate-400 uppercase">
             ENDURANCE
           </span>
           <div className="flex items-baseline space-x-1 mt-0.5">
-            <span className="text-xl sm:text-2xl font-chakra font-extrabold text-slate-800 dark:text-slate-100">
+            <span className="text-xl sm:text-2xl font-chakra font-extrabold text-slate-900 dark:text-slate-100">
               {enduranceHours.toFixed(1)}
             </span>
-            <span className="text-xs font-chakra font-medium text-slate-500 dark:text-slate-400">
-              hr
+            <span className="text-xs font-chakra font-semibold text-slate-600 dark:text-slate-400">
+              h
             </span>
           </div>
         </div>
@@ -146,10 +146,10 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
 
       {/* Elapsed Mission Time */}
       <div className="mb-3">
-        <span className="text-[10px] font-chakra font-semibold tracking-wider text-slate-400 dark:text-slate-500 uppercase">
+        <span className="text-[10px] font-chakra font-bold tracking-wider text-slate-600 dark:text-slate-400 uppercase">
           ELAPSED
         </span>
-        <div className="text-base sm:text-lg font-tech font-bold text-slate-800 dark:text-slate-100">
+        <div className="text-base sm:text-lg font-tech font-bold text-slate-900 dark:text-white">
           {elapsedTimeStr}
         </div>
       </div>
@@ -170,7 +170,7 @@ export const VibesparMissionProfile: React.FC<VibesparMissionProfileProps> = ({
             : 'border-[#17273f] bg-[#0c1424]'
         }`}
       >
-        <div className="text-[10px] font-chakra font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase mb-1">
+        <div className="text-[10px] font-chakra font-bold tracking-wider text-slate-700 dark:text-slate-300 uppercase mb-1">
           MISSION DECISION SUPPORT
         </div>
         <div

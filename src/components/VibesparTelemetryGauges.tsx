@@ -46,8 +46,7 @@ export const VibesparTelemetryGauges: React.FC<VibesparTelemetryGaugesProps> = (
 
   const getEgtStatus = (): GaugeStatus => {
     if (egt > 820) return 'CRITICAL';
-    if (egt > 740) return 'CRITICAL'; // In screenshot 742 is CRITICAL
-    if (egt > 720) return 'WARNING';
+    if (egt > 780) return 'WARNING';
     return 'NOMINAL';
   };
 
@@ -124,7 +123,7 @@ export const VibesparTelemetryGauges: React.FC<VibesparTelemetryGaugesProps> = (
       }`}
     >
       {/* Header */}
-      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400 mb-3">
+      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-800 dark:text-slate-200 mb-3">
         TELEMETRY GAUGES
       </h2>
 
@@ -136,7 +135,7 @@ export const VibesparTelemetryGauges: React.FC<VibesparTelemetryGaugesProps> = (
           const isNominal = g.status === 'NOMINAL';
 
           // Card border and background styling
-          let cardBorderClass = isLight ? 'border-slate-200 bg-white' : 'border-[#17273f] bg-[#0b1322]';
+          let cardBorderClass = isLight ? 'border-slate-300 bg-white shadow-xs' : 'border-[#17273f] bg-[#0b1322]';
           if (isCritical) {
             cardBorderClass = isLight
               ? 'border-rose-400 bg-rose-50/40 shadow-[0_0_12px_rgba(244,63,94,0.12)]'
@@ -148,24 +147,24 @@ export const VibesparTelemetryGauges: React.FC<VibesparTelemetryGaugesProps> = (
           }
 
           // Number color
-          let valueColorClass = 'text-cyan-600 dark:text-cyan-400';
+          let valueColorClass = 'text-cyan-700 dark:text-cyan-400 font-extrabold';
           if (isCritical) {
-            valueColorClass = 'text-rose-600 dark:text-rose-500';
+            valueColorClass = 'text-rose-600 dark:text-rose-500 font-extrabold';
           } else if (isWarning) {
-            valueColorClass = 'text-amber-500 dark:text-amber-400';
+            valueColorClass = 'text-amber-600 dark:text-amber-400 font-extrabold';
           }
 
           // Status Badge Pill styling
           let badgeClass = isLight
-            ? 'border-emerald-600 text-emerald-700 bg-emerald-50'
-            : 'border-emerald-500 text-emerald-400 bg-emerald-950/40';
+            ? 'border-emerald-600 text-emerald-800 bg-emerald-50 font-bold'
+            : 'border-emerald-500 text-emerald-400 bg-emerald-950/40 font-bold';
           if (isCritical) {
             badgeClass = isLight
-              ? 'border-rose-600 text-rose-700 bg-rose-50 font-bold'
+              ? 'border-rose-600 text-rose-800 bg-rose-50 font-bold'
               : 'border-rose-500 text-rose-400 bg-rose-950/40 font-bold';
           } else if (isWarning) {
             badgeClass = isLight
-              ? 'border-amber-500 text-amber-700 bg-amber-50 font-bold'
+              ? 'border-amber-500 text-amber-800 bg-amber-50 font-bold'
               : 'border-amber-400 text-amber-300 bg-amber-950/40 font-bold';
           }
 
@@ -175,16 +174,16 @@ export const VibesparTelemetryGauges: React.FC<VibesparTelemetryGaugesProps> = (
               className={`rounded-md border p-3 flex flex-col items-center justify-between transition-all duration-200 min-h-[118px] ${cardBorderClass}`}
             >
               {/* Metric Label */}
-              <span className="text-[11px] font-chakra font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
+              <span className="text-[11px] font-chakra font-bold tracking-wider text-slate-700 dark:text-slate-300 uppercase">
                 {g.label}
               </span>
 
               {/* Numerical Value */}
               <div className="flex flex-col items-center my-0.5">
-                <span className={`text-2xl sm:text-3xl font-chakra font-extrabold tracking-tight ${valueColorClass}`}>
+                <span className={`text-2xl sm:text-3xl font-chakra tracking-tight ${valueColorClass}`}>
                   {g.value}
                 </span>
-                <span className="text-[10px] font-chakra font-medium text-slate-400 dark:text-slate-500 -mt-0.5">
+                <span className="text-[10px] font-chakra font-semibold text-slate-600 dark:text-slate-400 -mt-0.5">
                   {g.unit}
                 </span>
               </div>

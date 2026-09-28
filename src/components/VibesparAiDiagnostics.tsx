@@ -63,7 +63,7 @@ export const VibesparAiDiagnostics: React.FC<VibesparAiDiagnosticsProps> = ({
       }`}
     >
       {/* Header */}
-      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400 mb-2">
+      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-800 dark:text-slate-200 mb-2">
         AI DIAGNOSTICS
       </h2>
 
@@ -72,7 +72,7 @@ export const VibesparAiDiagnostics: React.FC<VibesparAiDiagnosticsProps> = ({
         <span className={`text-4xl sm:text-5xl font-chakra font-black tracking-tight ${scoreColor}`}>
           {anomalyScore.toFixed(2)}
         </span>
-        <div className="text-[11px] font-chakra font-semibold tracking-wider text-slate-500 dark:text-slate-400 uppercase mt-1">
+        <div className="text-[11px] font-chakra font-bold tracking-wider text-slate-700 dark:text-slate-300 uppercase mt-1">
           ANOMALY SCORE
         </div>
       </div>

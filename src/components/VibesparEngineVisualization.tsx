@@ -228,10 +228,10 @@ export const VibesparEngineVisualization: React.FC<VibesparEngineVisualizationPr
                     <div
                       className={`text-xs font-chakra font-bold tracking-wider mb-2 transition-colors duration-150 ${
                         isFire
-                          ? 'text-amber-500 dark:text-amber-400 scale-105'
+                          ? 'text-amber-600 dark:text-amber-400 scale-105'
                           : isLight
-                          ? 'text-slate-400'
-                          : 'text-slate-600'
+                          ? 'text-slate-700'
+                          : 'text-slate-400'
                       }`}
                     >
                       {cyl.stroke}
@@ -338,7 +338,7 @@ export const VibesparEngineVisualization: React.FC<VibesparEngineVisualizationPr
                     {/* Cylinder Label at bottom */}
                     <div
                       className={`text-xs font-chakra font-bold tracking-wider mt-3 ${
-                        isLight ? 'text-slate-600' : 'text-slate-400'
+                        isLight ? 'text-slate-800' : 'text-slate-200'
                       }`}
                     >
                       {cyl.id}

@@ -79,7 +79,7 @@ export const VibesparEngineHealthIndex: React.FC<VibesparEngineHealthIndexProps>
       }`}
     >
       {/* Header */}
-      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-500 dark:text-slate-400 mb-2">
+      <h2 className="text-xs sm:text-sm font-chakra font-bold tracking-widest uppercase text-slate-800 dark:text-slate-200 mb-2">
         ENGINE HEALTH INDEX
       </h2>
 
@@ -93,7 +93,7 @@ export const VibesparEngineHealthIndex: React.FC<VibesparEngineHealthIndexProps>
             %
           </span>
         </div>
-        <div className="text-[11px] font-chakra font-semibold tracking-wider text-slate-500 dark:text-slate-400 uppercase mt-1">
+        <div className="text-[11px] font-chakra font-bold tracking-wider text-slate-700 dark:text-slate-300 uppercase mt-1">
           OVERALL HEALTH
         </div>
         <div className={`mt-2 px-3 py-0.5 rounded text-[10px] font-chakra font-bold tracking-wider uppercase border ${badgeBorder}`}>
@@ -108,12 +108,12 @@ export const VibesparEngineHealthIndex: React.FC<VibesparEngineHealthIndexProps>
 
           return (
             <div key={sub.id} className="flex items-center justify-between text-xs font-chakra">
-              <span className="w-24 text-[11px] font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+              <span className="w-24 text-[11px] font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
                 {sub.name}
               </span>
               <div
-                className={`flex-1 h-2 rounded-full overflow-hidden mx-2 ${
-                  isLight ? 'bg-slate-200' : 'bg-[#131f33]'
+                className={`flex-1 h-2.5 rounded-full overflow-hidden mx-2.5 ${
+                  isLight ? 'bg-slate-200 border border-slate-300' : 'bg-[#131f33] border border-slate-800'
                 }`}
               >
                 <div
@@ -121,6 +121,9 @@ export const VibesparEngineHealthIndex: React.FC<VibesparEngineHealthIndexProps>
                   style={{ width: `${Math.min(Math.max(sub.score, 5), 100)}%` }}
                 />
               </div>
+              <span className="w-9 text-right font-tech font-bold text-[11px] text-slate-800 dark:text-slate-200">
+                {Math.round(sub.score)}%
+              </span>
             </div>
           );
         })}

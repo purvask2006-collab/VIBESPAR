@@ -140,7 +140,7 @@ export interface DemoStep {
   advisory: string;
 }
 
-export type UserRole = 'OVERVIEW' | 'OPERATOR' | 'ENGINEER' | 'MAINTENANCE' | 'REPORTS' | 'EDGE_AI';
+export type UserRole = 'OVERVIEW' | 'OPERATOR' | 'ENGINEER' | 'MAINTENANCE' | 'REPORTS' | 'EDGE_AI' | 'TECH_SPECS';
 
 export interface WorkOrderItem {
   id: string;

@@ -7,13 +7,14 @@ import {
   RulEstimate,
   OperatingControls,
 } from '../types/engine';
-import { Engine3DView } from './Engine3DView';
+import { Engine3DView, VisualMode } from './Engine3DView';
 import {
   Activity,
   Gauge,
   Thermometer,
   Droplets,
   Flame,
+  Scissors,
   AlertTriangle,
   RotateCcw,
   ZoomIn,
@@ -56,6 +57,7 @@ interface AeroPistonFrontPageProps {
   theme: 'light' | 'dark';
   onInjectFault: (fault: FaultType, severity?: number) => void;
   onNavigateTab?: (tab: string) => void;
+  onOpenArchitectureModal?: () => void;
 }
 
 interface CalloutAnnotation {
@@ -83,6 +85,7 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
   theme,
   onInjectFault,
   onNavigateTab,
+  onOpenArchitectureModal,
 }) => {
   const isLight = theme === 'light';
 
@@ -91,6 +94,8 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
   const [isAutoRotating, setIsAutoRotating] = useState<boolean>(false);
   const [cameraZoomLevel, setCameraZoomLevel] = useState<number>(1.0);
   const [selectedComponent, setSelectedComponent] = useState<string | null>(null);
+  const [showCallouts, setShowCallouts] = useState<boolean>(true);
+  const [visualMode, setVisualMode] = useState<VisualMode>('CUTAWAY');
 
   // SHAP Explanation Accordion state (expanded by default matching screenshot)
   const [isShapExpanded, setIsShapExpanded] = useState<boolean>(true);
@@ -227,45 +232,183 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
     },
   ];
 
-  // 6 Cylinders temperature readings (exact to screenshot: C1: 184, C2: 192 (alert), C3: 181, C4: 178, C5: 176, C6: 173)
+  // Dynamic Health calculations
+  const healthScore = Math.max(5, Math.min(100, Math.round(health?.overall ?? 94)));
+  const healthStatusText = healthScore >= 80 ? 'Healthy' : healthScore >= 60 ? 'Degraded' : 'Critical Risk';
+  const healthColorClass = healthScore >= 80
+    ? 'text-emerald-600 dark:text-emerald-400'
+    : healthScore >= 60
+    ? 'text-amber-600 dark:text-amber-400'
+    : 'text-rose-600 dark:text-rose-400';
+  const healthStrokeClass = healthScore >= 80
+    ? 'stroke-emerald-500'
+    : healthScore >= 60
+    ? 'stroke-amber-500'
+    : 'stroke-rose-500';
+  const healthArcOffset = 251.2 * (1 - healthScore / 100);
+
+  // Dynamic RUL calculations (Nominal base 168-180h, degradable based on fault & physics)
+  const currentRulHours = Math.round(rul?.minHours ?? (activeFault === 'NORMAL' ? 168 : 126));
+  const maxRulReference = 200;
+  const rulPercentage = Math.min(100, Math.max(5, Math.round((currentRulHours / maxRulReference) * 100)));
+  const rulArcOffset = 251.2 * (1 - Math.min(1, currentRulHours / maxRulReference));
+
+  // 6 Cylinders temperature readings (Live from telemetry with individual cylinder gradient)
+  const cyl1 = telemetry.chtCylinders?.[0] ?? (isInjectorFault ? 184 : 172);
+  const cyl2 = telemetry.chtCylinders?.[1] ?? (isInjectorFault ? 192 : 173);
+  const cyl3 = telemetry.chtCylinders?.[2] ?? (isInjectorFault ? 181 : 171);
+  const cyl4 = telemetry.chtCylinders?.[3] ?? (isInjectorFault ? 178 : 170);
+  const cyl5 = Number((Math.min(cyl1, cyl4) - 2.0).toFixed(1));
+  const cyl6 = Number((Math.min(cyl2, cyl3) - 3.5).toFixed(1));
+
   const cylinderTemps = [
-    { id: 'C1', temp: isInjectorFault ? 184 : 172, isAlert: false },
-    { id: 'C2', temp: isInjectorFault ? 192 : 173, isAlert: isInjectorFault },
-    { id: 'C3', temp: isInjectorFault ? 181 : 171, isAlert: false },
-    { id: 'C4', temp: isInjectorFault ? 178 : 170, isAlert: false },
-    { id: 'C5', temp: isInjectorFault ? 176 : 169, isAlert: false },
-    { id: 'C6', temp: isInjectorFault ? 173 : 168, isAlert: false },
+    { id: 'C1', temp: cyl1, isAlert: cyl1 > 190 },
+    { id: 'C2', temp: cyl2, isAlert: cyl2 > 188 || isInjectorFault },
+    { id: 'C3', temp: cyl3, isAlert: cyl3 > 190 },
+    { id: 'C4', temp: cyl4, isAlert: cyl4 > 190 },
+    { id: 'C5', temp: cyl5, isAlert: cyl5 > 190 },
+    { id: 'C6', temp: cyl6, isAlert: cyl6 > 190 },
   ];
 
-  // SHAP Feature Importance Bars (exact values from reference screenshot)
-  const shapFeatures = [
-    { name: 'Fuel Flow', delta: '+0.42', value: 0.42, color: '#f43f5e' }, // coral/red
-    { name: 'Cylinder Temp', delta: '+0.31', value: 0.31, color: '#f97316' }, // orange
-    { name: 'Vibration', delta: '+0.24', value: 0.24, color: '#f59e0b' }, // amber
-    { name: 'RPM Variation', delta: '+0.15', value: 0.15, color: '#10b981' }, // green
-    { name: 'Exhaust Temp', delta: '+0.08', value: 0.08, color: '#0284c7' }, // blue
-  ];
+  // Dynamic SHAP Feature Importance Bars (Explainable AI grounded in physics residuals)
+  const shapFeatures = React.useMemo(() => {
+    if (activeFault === 'INJECTOR_DEGRADATION') {
+      return [
+        { name: 'Fuel Flow', delta: '+0.42', value: 0.42, color: '#f43f5e' },
+        { name: 'Cylinder Temp', delta: '+0.31', value: 0.31, color: '#f97316' },
+        { name: 'Vibration', delta: '+0.24', value: 0.24, color: '#f59e0b' },
+        { name: 'RPM Variation', delta: '+0.15', value: 0.15, color: '#10b981' },
+        { name: 'Exhaust Temp', delta: '+0.08', value: 0.08, color: '#0284c7' },
+      ];
+    }
+    if (activeFault === 'LUBRICATION_FAILURE') {
+      return [
+        { name: 'Oil Pressure', delta: '-0.58', value: 0.58, color: '#f43f5e' },
+        { name: 'Oil Temp', delta: '+0.46', value: 0.46, color: '#f97316' },
+        { name: 'Vibration', delta: '+0.29', value: 0.29, color: '#f59e0b' },
+        { name: 'Bearing Friction', delta: '+0.22', value: 0.22, color: '#10b981' },
+        { name: 'Fuel Flow', delta: '+0.04', value: 0.04, color: '#0284c7' },
+      ];
+    }
+    if (activeFault === 'OVERHEATING') {
+      return [
+        { name: 'Cylinder Temp', delta: '+0.62', value: 0.62, color: '#f43f5e' },
+        { name: 'Coolant Temp', delta: '+0.48', value: 0.48, color: '#f97316' },
+        { name: 'Exhaust Temp', delta: '+0.32', value: 0.32, color: '#f59e0b' },
+        { name: 'Oil Temp', delta: '+0.26', value: 0.26, color: '#10b981' },
+        { name: 'Air Intake Delta', delta: '+0.07', value: 0.07, color: '#0284c7' },
+      ];
+    }
+    if (activeFault === 'MISFIRE') {
+      return [
+        { name: 'Vibration (Cyclic)', delta: '+0.54', value: 0.54, color: '#f43f5e' },
+        { name: 'RPM Jitter', delta: '+0.48', value: 0.48, color: '#f97316' },
+        { name: 'EGT Balance', delta: '-0.36', value: 0.36, color: '#f59e0b' },
+        { name: 'Fuel Residual', delta: '+0.20', value: 0.20, color: '#10b981' },
+        { name: 'Torque Ripple', delta: '+0.14', value: 0.14, color: '#0284c7' },
+      ];
+    }
+    if (activeFault === 'SENSOR_DRIFT') {
+      return [
+        { name: 'CHT Thermocouple', delta: '+0.64', value: 0.64, color: '#f43f5e' },
+        { name: 'Cross-Sensor Residual', delta: '+0.52', value: 0.52, color: '#f97316' },
+        { name: 'EGT Coupled Delta', delta: '0.02', value: 0.05, color: '#10b981' },
+        { name: 'Oil Temp Coupled', delta: '0.01', value: 0.04, color: '#0284c7' },
+        { name: 'Vibration Signal', delta: '0.01', value: 0.03, color: '#6366f1' },
+      ];
+    }
+    return [
+      { name: 'Fuel Flow', delta: '+0.02', value: 0.05, color: '#10b981' },
+      { name: 'Cylinder Temp', delta: '+0.01', value: 0.04, color: '#10b981' },
+      { name: 'Vibration', delta: '+0.03', value: 0.06, color: '#10b981' },
+      { name: 'RPM Stability', delta: '+0.01', value: 0.03, color: '#0284c7' },
+      { name: 'Exhaust Temp', delta: '+0.02', value: 0.04, color: '#0284c7' },
+    ];
+  }, [activeFault]);
 
-  // Historical key parameters time-series (10 min trend matching reference screenshot)
-  const keyParametersData = [
-    { time: '18:20', rpm: 3180, oilTemp: 80, coolantTemp: 88, vibration: 0.16 },
-    { time: '18:22', rpm: 3200, oilTemp: 81, coolantTemp: 89, vibration: 0.17 },
-    { time: '18:24', rpm: 3210, oilTemp: 82, coolantTemp: 90, vibration: 0.18 },
-    { time: '18:26', rpm: 3195, oilTemp: 82, coolantTemp: 91, vibration: 0.18 },
-    { time: '18:28', rpm: 3205, oilTemp: 83, coolantTemp: 91, vibration: 0.19 },
-    { time: '18:30', rpm: 3200, oilTemp: 82, coolantTemp: 91, vibration: 0.18 },
-  ];
+  // Live key parameters time-series (Derived from rolling telemetry history with nominal fallback)
+  const keyParametersData = React.useMemo(() => {
+    if (telemetryHistory && telemetryHistory.length >= 6) {
+      return telemetryHistory.slice(-8).map((pt, idx) => ({
+        time: pt.timeStr ? pt.timeStr.substring(3) : `${idx * 10}s`,
+        rpm: pt.rpm,
+        oilTemp: Math.round(pt.oilTemperature),
+        coolantTemp: Math.round(pt.cht),
+        vibration: Number(pt.vibration.toFixed(2)),
+      }));
+    }
+    return [
+      { time: '18:20', rpm: 3180, oilTemp: 80, coolantTemp: 88, vibration: 0.16 },
+      { time: '18:22', rpm: 3200, oilTemp: 81, coolantTemp: 89, vibration: 0.17 },
+      { time: '18:24', rpm: 3210, oilTemp: 82, coolantTemp: 90, vibration: 0.18 },
+      { time: '18:26', rpm: 3195, oilTemp: 82, coolantTemp: 91, vibration: 0.18 },
+      { time: '18:28', rpm: 3205, oilTemp: 83, coolantTemp: 91, vibration: 0.19 },
+      { time: '18:30', rpm: 3200, oilTemp: 82, coolantTemp: 91, vibration: 0.18 },
+    ];
+  }, [telemetryHistory]);
 
-  // RUL Trend Projection (0h, 50h, 100h, 150h, 200h)
-  const rulTrendPoints = [
-    { h: '0h', rul: 180 },
-    { h: '50h', rul: 165 },
-    { h: '100h', rul: 142 },
-    { h: '150h', rul: 126 },
-    { h: '200h', rul: 108 },
-  ];
+  // RUL Trend Projection dynamically aligned with current degradation state
+  const rulTrendPoints = React.useMemo(() => {
+    return [
+      { h: '0h', rul: 180 },
+      { h: '50h', rul: Math.max(currentRulHours, 165) },
+      { h: '100h', rul: Math.max(currentRulHours, 142) },
+      { h: '150h', rul: currentRulHours },
+      { h: '200h', rul: Math.max(10, Math.round(currentRulHours * 0.78)) },
+    ];
+  }, [currentRulHours]);
 
-  // Handle Ask Gemini query
+  // Diagnostics Metadata derived dynamically
+  const faultTitle =
+    activeFault === 'INJECTOR_DEGRADATION'
+      ? 'Injector Clogging Detected'
+      : activeFault === 'LUBRICATION_FAILURE'
+      ? 'Lubrication Failure Risk'
+      : activeFault === 'OVERHEATING'
+      ? 'Thermal Overheat Boundary'
+      : activeFault === 'MISFIRE'
+      ? 'Cylinder Combustion Misfire'
+      : activeFault === 'SENSOR_DRIFT'
+      ? 'Sensor Telemetry Drift'
+      : activeFault === 'VIBRATION_ANOMALY'
+      ? 'Mechanical Vibration Anomaly'
+      : 'Nominal Propulsion Envelope';
+
+  const faultSeverityPercent = activeFault === 'NORMAL' ? '0%' : `${Math.round((faultSeverity || 0.7) * 100)}%`;
+  const faultConfidencePercent = `${Math.round(diagnostic?.confidence ?? 94)}%`;
+  const faultTypeName = activeFault === 'INJECTOR_DEGRADATION' ? 'Injector Clogging' : activeFault === 'NORMAL' ? 'None (Nominal)' : activeFault.replace(/_/g, ' ');
+
+  const affectedComponentName =
+    activeFault === 'INJECTOR_DEGRADATION'
+      ? 'Injector (Cylinder 2)'
+      : activeFault === 'LUBRICATION_FAILURE'
+      ? 'Oil Circuit & Bearings'
+      : activeFault === 'OVERHEATING'
+      ? 'Cooling System & Heads'
+      : activeFault === 'MISFIRE'
+      ? 'Ignition Coil / Plug #3'
+      : activeFault === 'SENSOR_DRIFT'
+      ? 'CHT-01 Thermocouple'
+      : activeFault === 'VIBRATION_ANOMALY'
+      ? 'Propeller & Crank Hub'
+      : 'Propulsion System (Nominal)';
+
+  const suggestedActionText =
+    activeFault === 'INJECTOR_DEGRADATION'
+      ? 'Inspect and ultrasonic-clean Cyl #2 injector. Check fuel quality and rail filtration.'
+      : activeFault === 'LUBRICATION_FAILURE'
+      ? 'CRITICAL: Oil pressure drop. Step down throttle to 55%, declare PAN-PAN, RTB immediately.'
+      : activeFault === 'OVERHEATING'
+      ? 'Enrich fuel mixture, level off climb, step down throttle to 50% to prevent head warping.'
+      : activeFault === 'MISFIRE'
+      ? 'Inspect secondary ignition leads, test coil pack and spark plug gaps on Cylinder 3.'
+      : activeFault === 'SENSOR_DRIFT'
+      ? 'Avionics decouple confirmed: Recalibrate CHT thermocouple channel. Engine physically healthy.'
+      : activeFault === 'VIBRATION_ANOMALY'
+      ? 'Perform dynamic propeller balancing. Inspect crankcase rubber vibration dampers.'
+      : 'Maintain cruise altitude and continuous CAN telemetry surveillance.';
+
+  // Handle Ask Gemini query with dynamic physics grounding
   const handleAskGemini = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!geminiQuery.trim()) return;
@@ -274,13 +417,24 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
     setTimeout(() => {
       let ans = '';
       if (geminiQuery.toLowerCase().includes('health') || geminiQuery.toLowerCase().includes('decreasing')) {
-        ans =
-          'Analysis: Cylinder #2 injector exhibits a 70% restriction in nozzle area, causing a localized lean combustion zone. Cylinder Head Temp (C2) has risen to 192°C with a +18°C delta over adjacent cylinders. Residual analysis indicates fuel flow is down to 4.2 L/h, reducing Predicted RUL from 168h to 126h. Recommendation: Cycle throttle down to 60%, prepare to land for injector ultrasonic cleaning and fuel rail filtration inspection.';
+        if (activeFault === 'INJECTOR_DEGRADATION') {
+          ans =
+            `Analysis: Cylinder #2 injector exhibits a ${Math.round(faultSeverity * 100)}% restriction in nozzle area, causing a localized lean combustion zone. Cylinder Head Temp (C2) has risen to ${cyl2}°C with a +${(cyl2 - cyl1).toFixed(1)}°C delta over adjacent cylinders. Residual analysis indicates fuel flow is down, reducing Predicted RUL from 168h to ${currentRulHours}h. Recommendation: Cycle throttle down to 60%, prepare to land for injector ultrasonic cleaning and fuel rail filtration inspection.`;
+        } else if (activeFault === 'LUBRICATION_FAILURE') {
+          ans =
+            `CRITICAL ALERT: Lubrication boundary failure detected. Oil pressure is at ${telemetry.oilPressure} bar (below safe threshold 2.8 bar) with oil temperature at ${telemetry.oilTemperature}°C. Bearing hydrodynamic oil wedge is compromised, accelerating journal friction. Predicted RUL: ${currentRulHours} hours. Immediate landing commanded.`;
+        } else if (activeFault === 'OVERHEATING') {
+          ans =
+            `THERMAL WARNING: Cylinder head temperature has reached ${telemetry.cht}°C. Heat dissipation capacity is degraded by ram air density deficit or coolant boil-off. Current overall health index: ${healthScore}%. Recommendation: Enrich mixture and step down throttle to 50%.`;
+        } else {
+          ans =
+            `Engine health index is currently at ${healthScore}%. All primary thermodynamic channels (CHT: ${telemetry.cht}°C, EGT: ${telemetry.egt}°C, Oil: ${telemetry.oilTemperature}°C) correlate within nominal digital twin envelope.`;
+        }
       } else if (geminiQuery.toLowerCase().includes('rul') || geminiQuery.toLowerCase().includes('remaining')) {
         ans =
-          'Predicted RUL is currently 126 hours (down from 168 hours baseline). Degradation rate is currently 0.38 hours per flight hour due to thermal stress on Cylinder 2 valve guides. Weibull MTBF projection remains above the mission abort threshold of 50 hours.';
+          `Predicted Remaining Useful Life (RUL) is currently ${currentRulHours} hours (baseline 168-180h). Overall health index is ${healthScore}% with wear factor ${rul?.wearFactor ?? 0.38}x. Advisory: ${suggestedActionText}`;
       } else {
-        ans = `Telemetry telemetry shows engine speed at ${telemetry.rpm} RPM with ${telemetry.vibration}g vibration and ${telemetry.oilTemperature}°C oil temperature. Digital Twin residual cross-correlation confirms operational boundaries remain within UAV safe envelope.`;
+        ans = `Digital Twin telemetry confirms engine speed at ${telemetry.rpm} RPM, torque ${telemetry.torqueNm} Nm, vibration ${telemetry.vibration}g, and MAP ${telemetry.manifoldPressure} inHg. Physics residual cross-correlation confidence: ${faultConfidencePercent}.`;
       }
       setGeminiResponse({
         query: geminiQuery,
@@ -288,7 +442,7 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
         timestamp: new Date().toLocaleTimeString(),
       });
       setIsAskingGemini(false);
-    }, 700);
+    }, 600);
   };
 
   // Reset 3D camera
@@ -498,25 +652,25 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
                     strokeWidth="8"
                     fill="transparent"
                   />
-                  {/* Progress arc (94%) */}
+                  {/* Progress arc (Dynamic with health score) */}
                   <circle
                     cx="50"
                     cy="50"
                     r="40"
-                    className="stroke-emerald-500 transition-all duration-1000 ease-out"
+                    className={`${healthStrokeClass} transition-all duration-700 ease-out`}
                     strokeWidth="8"
                     strokeDasharray={251.2}
-                    strokeDashoffset={251.2 * (1 - 0.94)}
+                    strokeDashoffset={healthArcOffset}
                     strokeLinecap="round"
                     fill="transparent"
                   />
                 </svg>
                 <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                   <span className="font-chakra font-bold text-2xl text-slate-900 dark:text-white">
-                    94%
+                    {healthScore}%
                   </span>
-                  <span className="text-[11px] font-chakra font-semibold text-emerald-600 dark:text-emerald-400">
-                    Healthy
+                  <span className={`text-[11px] font-chakra font-semibold ${healthColorClass}`}>
+                    {healthStatusText}
                   </span>
                 </div>
               </div>
@@ -524,27 +678,29 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
               {/* RUL and Operating Hours details */}
               <div className="flex-1 pl-4 space-y-3">
                 <div>
-                  <div className="text-[11px] font-chakra text-slate-500 dark:text-slate-400">
+                  <div className="text-[11px] font-chakra font-semibold text-slate-700 dark:text-slate-300">
                     RUL (Remaining Useful Life)
                   </div>
                   <div className="font-tech font-bold text-xl text-slate-900 dark:text-white">
-                    168 h
+                    {currentRulHours} h
                   </div>
                   {/* Progress bar */}
                   <div className="w-full h-2 bg-slate-100 dark:bg-slate-800 rounded-full mt-1.5 overflow-hidden">
                     <div
-                      className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                      style={{ width: '84%' }}
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        rulPercentage > 60 ? 'bg-emerald-500' : rulPercentage > 30 ? 'bg-amber-500' : 'bg-rose-500'
+                      }`}
+                      style={{ width: `${rulPercentage}%` }}
                     />
                   </div>
                 </div>
 
                 <div>
-                  <div className="text-[11px] font-chakra text-slate-500 dark:text-slate-400">
+                  <div className="text-[11px] font-chakra font-semibold text-slate-700 dark:text-slate-300">
                     Operating Hours
                   </div>
-                  <div className="font-tech font-bold text-lg text-slate-700 dark:text-slate-300">
-                    432 h
+                  <div className="font-tech font-bold text-lg text-slate-900 dark:text-slate-100">
+                    432.4 h
                   </div>
                 </div>
               </div>
@@ -558,35 +714,30 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
         <div className="lg:col-span-6 flex flex-col space-y-3.5">
           {/* Main 3D Engine Visualization Viewport with Real Geometry & Callouts */}
           <div
-            className={`rounded-xl border flex flex-col shadow-xs transition-colors relative overflow-hidden h-[480px] min-h-[460px] ${
+            className={`rounded-xl border flex flex-col shadow-xs transition-colors relative overflow-hidden h-[490px] min-h-[470px] ${
               isLight
                 ? 'bg-slate-50 border-slate-200/90 text-slate-800'
                 : 'bg-[#060b14] border-[#15253b] text-slate-100 shadow-[0_4px_24px_rgba(0,0,0,0.5)]'
             }`}
           >
-            {/* Top Sub-bar with Component Focus Indicator */}
-            <div className="absolute top-2.5 left-3.5 z-20 flex items-center space-x-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-chakra font-bold tracking-wider uppercase bg-cyan-500/10 border border-cyan-500/30 text-cyan-600 dark:text-cyan-400 backdrop-blur-md">
-                3D DIGITAL TWIN • ROTAX 914-F
-              </span>
-              {selectedComponent && (
-                <span className="px-2 py-0.5 rounded text-[10px] font-chakra font-bold tracking-wider uppercase bg-amber-500/10 border border-amber-500/30 text-amber-600 dark:text-amber-400 backdrop-blur-md">
-                  FOCUS: {selectedComponent}
-                </span>
-              )}
-            </div>
-
-            {/* Embedded Interactive Three.js WebGL Engine Model */}
+            {/* Embedded Interactive Three.js WebGL Engine Model with Built-in Header */}
             <div className="w-full h-full relative">
               <Engine3DView
                 telemetry={telemetry}
                 activeFault={activeFault}
                 theme={theme}
                 isPaused={!is3DAnimationActive}
+                visualMode={visualMode}
+                onVisualModeChange={setVisualMode}
+                showCallouts={showCallouts}
+                onToggleCallouts={() => setShowCallouts(!showCallouts)}
+                onOpenArchitectureModal={onOpenArchitectureModal}
+                selectedComponent={selectedComponent}
               />
 
               {/* OVERLAY: Precision Callout Pointers Matching Reference Image */}
-              <div className="absolute inset-0 pointer-events-none z-10">
+              {showCallouts && (
+                <div className="absolute inset-0 top-[38px] pointer-events-none z-10 animate-in fade-in duration-150">
                 {/* SVG Pointer Connecting Lines */}
                 <svg className="w-full h-full absolute inset-0">
                   <defs>
@@ -814,6 +965,7 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
                   </div>
                 </div>
               </div>
+              )}
 
               {/* Bottom Details Drawer when a component is clicked */}
               {selectedComponent && (
@@ -851,10 +1003,48 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
                   : 'bg-[#08101e] border-[#15253b] text-slate-100 shadow-[0_4px_16px_rgba(0,0,0,0.3)]'
               }`}
             >
-              <div className="flex items-center justify-between pb-2 border-b border-inherit">
-                <h4 className="font-chakra font-bold text-xs tracking-wider uppercase text-slate-700 dark:text-slate-300">
-                  Internal View (Transparent)
+              <div className="flex flex-wrap items-center justify-between gap-1 pb-2 border-b border-inherit">
+                <h4 className="font-chakra font-bold text-xs tracking-wider uppercase text-slate-900 dark:text-white">
+                  3D View Mode
                 </h4>
+                {/* Visual Mode Selector Tabs */}
+                <div className="flex items-center space-x-1 text-[10px] font-chakra font-bold">
+                  <button
+                    onClick={() => setVisualMode('CUTAWAY')}
+                    className={`px-1.5 py-0.5 rounded transition-all ${
+                      visualMode === 'CUTAWAY'
+                        ? 'bg-cyan-700 text-white font-bold shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900'
+                    }`}
+                    title="Internal Cutaway View"
+                  >
+                    Cutaway
+                  </button>
+                  <button
+                    onClick={() => setVisualMode('HEATMAP')}
+                    className={`px-1.5 py-0.5 rounded transition-all flex items-center space-x-0.5 ${
+                      visualMode === 'HEATMAP'
+                        ? 'bg-amber-600 text-white font-bold shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-amber-500'
+                    }`}
+                    title="Thermal Heat Map Isotherms"
+                  >
+                    <Flame className="w-2.5 h-2.5" />
+                    <span>Heat Map</span>
+                  </button>
+                  <button
+                    onClick={() => setVisualMode('CROSS_SECTION')}
+                    className={`px-1.5 py-0.5 rounded transition-all flex items-center space-x-0.5 ${
+                      visualMode === 'CROSS_SECTION'
+                        ? 'bg-teal-700 text-white font-bold shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-teal-500'
+                    }`}
+                    title="CAD Slicing Plane & Geometric Areas"
+                  >
+                    <Scissors className="w-2.5 h-2.5" />
+                    <span>Cross Sec</span>
+                  </button>
+                </div>
               </div>
 
               {/* Graphical Schematic of Cutaway Engine & Color Legend */}
@@ -1041,22 +1231,28 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
               </h3>
             </div>
 
-            {/* Alert Banner: Injector Clogging Detected (Severity: 70%) */}
-            <div className="mt-3 p-2.5 rounded-lg bg-rose-500/10 border border-rose-500/30 flex items-center justify-between">
+            {/* Alert Banner: Dynamic Fault Indicator */}
+            <div className={`mt-3 p-2.5 rounded-lg border flex items-center justify-between ${
+              activeFault === 'NORMAL'
+                ? 'bg-emerald-500/10 border-emerald-500/30'
+                : 'bg-rose-500/10 border-rose-500/30'
+            }`}>
               <div className="flex items-center space-x-2">
-                <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
-                <span className="font-chakra font-bold text-xs text-rose-600 dark:text-rose-400">
-                  {isInjectorFault
-                    ? 'Injector Clogging Detected'
-                    : isLubeFault
-                    ? 'Lubrication Failure Risk'
-                    : activeFault === 'OVERHEATING'
-                    ? 'Thermal Overheat Boundary'
-                    : 'Nominal Propulsion Envelope'}
+                {activeFault === 'NORMAL' ? (
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
+                ) : (
+                  <AlertTriangle className="w-4 h-4 text-rose-500 shrink-0" />
+                )}
+                <span className={`font-chakra font-bold text-xs ${
+                  activeFault === 'NORMAL' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+                }`}>
+                  {faultTitle}
                 </span>
               </div>
-              <span className="text-[11px] font-chakra font-semibold text-rose-600 dark:text-rose-400">
-                Severity: {isInjectorFault ? `${Math.round(faultSeverity * 100)}%` : '0%'}
+              <span className={`text-[11px] font-chakra font-semibold ${
+                activeFault === 'NORMAL' ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-600 dark:text-rose-400'
+              }`}>
+                Severity: {faultSeverityPercent}
               </span>
             </div>
 
@@ -1064,40 +1260,38 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
             <div className="mt-3 space-y-2 text-xs font-chakra">
               {/* Confidence */}
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Confidence</span>
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Confidence</span>
                 <div className="flex items-center space-x-2">
                   <div className="w-24 h-2 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: '94%' }} />
+                    <div className="h-full bg-emerald-500 rounded-full" style={{ width: faultConfidencePercent }} />
                   </div>
-                  <span className="font-bold text-slate-800 dark:text-slate-200">94%</span>
+                  <span className="font-bold text-slate-900 dark:text-white">{faultConfidencePercent}</span>
                 </div>
               </div>
 
               {/* Fault Type */}
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Fault Type</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {isInjectorFault ? 'Injector Clogging' : activeFault.replace(/_/g, ' ')}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Fault Type</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {faultTypeName}
                 </span>
               </div>
 
               {/* Affected Component */}
               <div className="flex items-center justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Affected Component</span>
-                <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {isInjectorFault ? 'Injector (Cylinder 2)' : 'Propulsion System'}
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Affected Component</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {affectedComponentName}
                 </span>
               </div>
 
               {/* Suggested Action */}
               <div className="pt-1">
-                <span className="text-slate-500 dark:text-slate-400 block mb-0.5">
+                <span className="font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
                   Suggested Action
                 </span>
-                <p className="text-[11px] text-slate-700 dark:text-slate-300 leading-relaxed font-sans bg-slate-50 dark:bg-slate-900/60 p-1.5 rounded border border-slate-200 dark:border-slate-800">
-                  {isInjectorFault
-                    ? 'Inspect and clean/replace injector. Check fuel quality.'
-                    : 'Maintain cruise altitude and continuous CAN telemetry surveillance.'}
+                <p className="text-[11px] text-slate-800 dark:text-slate-200 leading-relaxed font-sans bg-slate-50 dark:bg-slate-900/60 p-2 rounded border border-slate-200 dark:border-slate-800">
+                  {suggestedActionText}
                 </p>
               </div>
             </div>
@@ -1144,7 +1338,7 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
             </div>
           </div>
 
-          {/* CARD 2: Predicted RUL (126 h gauge + RUL Trend) */}
+          {/* CARD 2: Predicted RUL (Dynamic gauge + RUL Trend) */}
           <div
             className={`rounded-xl border p-4 flex flex-col shadow-xs transition-colors ${
               isLight
@@ -1157,7 +1351,7 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
             </h3>
 
             <div className="grid grid-cols-12 gap-2 pt-2 items-center">
-              {/* Radial Ring (126 h) */}
+              {/* Radial Ring */}
               <div className="col-span-5 flex flex-col items-center justify-center">
                 <div className="relative w-20 h-20 flex items-center justify-center">
                   <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
@@ -1173,17 +1367,19 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
                       cx="50"
                       cy="50"
                       r="40"
-                      className="stroke-cyan-500"
+                      className={`${
+                        currentRulHours > 120 ? 'stroke-cyan-500' : currentRulHours > 50 ? 'stroke-amber-500' : 'stroke-rose-500'
+                      } transition-all duration-700 ease-out`}
                       strokeWidth="8"
                       strokeDasharray={251.2}
-                      strokeDashoffset={251.2 * (1 - 0.63)}
+                      strokeDashoffset={rulArcOffset}
                       strokeLinecap="round"
                       fill="transparent"
                     />
                   </svg>
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
                     <span className="font-chakra font-bold text-lg text-slate-900 dark:text-white">
-                      126 h
+                      {currentRulHours} h
                     </span>
                     <span className="text-[9px] font-chakra text-slate-500 dark:text-slate-400">
                       Remaining
@@ -1243,20 +1439,20 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
 
             <div className="pt-2 space-y-1 text-[11px] font-chakra">
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Last Update</span>
-                <span className="font-mono text-slate-700 dark:text-slate-300">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Last Update</span>
+                <span className="font-mono text-slate-900 dark:text-slate-100">
                   2026-09-26 18:30:00
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Data Source</span>
-                <span className="text-slate-700 dark:text-slate-300 font-medium">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Data Source</span>
+                <span className="text-slate-900 dark:text-slate-100 font-semibold">
                   Simulated ECU + Physics Model
                 </span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-500 dark:text-slate-400">Model</span>
-                <span className="text-slate-700 dark:text-slate-300 font-medium">
+                <span className="font-semibold text-slate-700 dark:text-slate-300">Model</span>
+                <span className="text-slate-900 dark:text-slate-100 font-semibold">
                   ANSYS Twin Builder + Simscape
                 </span>
               </div>
@@ -1455,12 +1651,12 @@ export const AeroPistonFrontPage: React.FC<AeroPistonFrontPageProps> = ({
                   }}
                 />
                 <Bar dataKey="temp" radius={[4, 4, 0, 0]}>
-                  {cylinderTemps.map((entry, index) => (
-                    <Cell
-                      key={`cell-${index}`}
-                      fill={entry.isAlert ? '#f43f5e' : '#38bdf8'}
-                    />
-                  ))}
+                    {cylinderTemps.map((entry, index) => (
+                      <Cell
+                        key={`cell-${index}`}
+                        fill={entry.isAlert ? '#f43f5e' : entry.temp > 180 ? '#f59e0b' : '#38bdf8'}
+                      />
+                    ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>

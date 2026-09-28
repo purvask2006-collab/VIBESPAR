@@ -240,11 +240,13 @@ export const OperatorView: React.FC<OperatorViewProps> = ({
   const currentRpm = Math.round(telemetry.rpm || 2418);
   const rpmPct = Math.min(100, Math.round((currentRpm / maxSafeRpm) * 100));
 
-  // Fuel efficiency vs baseline calculation
-  const currentFuelEff = (telemetry.fuelFlow || 18.4) / ((telemetry.powerHp || 95) * 0.7457);
-  const baselineEff = 0.265; // kg/kWh baseline
-  const effDeltaPct = (((currentFuelEff - baselineEff) / baselineEff) * 100).toFixed(1);
-  const isEffBetter = Number(effDeltaPct) <= 0;
+  // Fuel efficiency vs baseline calculation: Fuel mass flow (kg/h) = fuelFlow (L/h) * 0.72 kg/L (Avgas/Mogas)
+  // Power (kW) = Power (HP) * 0.7457 kW/HP. BSFC = kg fuel / kWh
+  const currentFuelEff = ((telemetry.fuelFlow || 18.4) * 0.72) / (Math.max(10, telemetry.powerHp || 95) * 0.7457);
+  const baselineEff = 0.265; // kg/kWh baseline for healthy Rotax 914
+  const effDeltaNum = ((currentFuelEff - baselineEff) / baselineEff) * 100;
+  const effDeltaPct = (effDeltaNum > 0 ? '+' : '') + effDeltaNum.toFixed(1);
+  const isEffBetter = effDeltaNum <= 0;
 
   // Flight phases
   const flightPhases: { id: MissionPhase; label: string; desc: string }[] = [

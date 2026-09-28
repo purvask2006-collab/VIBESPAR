@@ -50,6 +50,7 @@ import { PythonDashCodeModal } from './components/PythonDashCodeModal';
 import { MissionReportsModule } from './components/reports/MissionReportsModule';
 import { EdgeAiSecurityPanel } from './components/edge/EdgeAiSecurityPanel';
 import { AeroPistonFrontPage } from './components/AeroPistonFrontPage';
+import { DigitalTwinArchitectureModal } from './components/DigitalTwinArchitectureModal';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export default function App() {
@@ -67,6 +68,9 @@ export default function App() {
 
   // Mission-Wise Health Reports modal state (accessible from all roles)
   const [isReportsModalOpen, setIsReportsModalOpen] = useState<boolean>(false);
+
+  // Digital Twin Architecture & Technical Documentation modal state
+  const [isArchitectureModalOpen, setIsArchitectureModalOpen] = useState<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem('drdo_theme', theme);
@@ -417,11 +421,18 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         currentRole={currentRole}
-        onSelectRole={(r) => setCurrentRole(r)}
+        onSelectRole={(r) => {
+          if (r === 'TECH_SPECS') {
+            setIsArchitectureModalOpen(true);
+          } else {
+            setCurrentRole(r);
+          }
+        }}
         show3DEngine={show3DEngine}
         onToggle3DEngine={() => setShow3DEngine(!show3DEngine)}
         onOpenPythonModal={() => setIsPythonModalOpen(true)}
         onOpenReportsModal={() => setIsReportsModalOpen(true)}
+        onOpenArchitectureModal={() => setIsArchitectureModalOpen(true)}
         uavId="UAV-07"
         engineId="AERO-PISTON-01"
         missionId="MISSION-027"
@@ -462,7 +473,14 @@ export default function App() {
                 setControls((prev) => ({ ...prev, throttle: 68, altitude: 8400 }));
               }
             }}
-            onNavigateTab={(tab) => setCurrentRole(tab as UserRole)}
+            onNavigateTab={(tab) => {
+              if (tab === 'TECH_SPECS') {
+                setIsArchitectureModalOpen(true);
+              } else {
+                setCurrentRole(tab as UserRole);
+              }
+            }}
+            onOpenArchitectureModal={() => setIsArchitectureModalOpen(true)}
           />
         )}
 
@@ -713,6 +731,13 @@ export default function App() {
         isOpen={isReportsModalOpen}
         onClose={() => setIsReportsModalOpen(false)}
         currentEngineHealth={Math.round(healthScores.overall)}
+      />
+
+      {/* Digital Twin Architecture & Technical Documentation Modal */}
+      <DigitalTwinArchitectureModal
+        isOpen={isArchitectureModalOpen}
+        onClose={() => setIsArchitectureModalOpen(false)}
+        theme={theme}
       />
     </div>
   );

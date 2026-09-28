@@ -207,7 +207,7 @@ export function simulateAeroPistonTelemetry(
 
   // Simulated fuel tank level (burn rate)
   const fuelBurnKgPerSec = (finalFuelFlow * 0.72) / 3600;
-  const currentFuel = Math.max(0.5, Number((baseRemainingFuel - fuelBurnKgPerSec * (elapsedSeconds % 3600)).toFixed(2)));
+  const currentFuel = Math.max(0.5, Number((baseRemainingFuel - fuelBurnKgPerSec * elapsedSeconds).toFixed(2)));
 
   const now = new Date();
   const timeStr = now.toTimeString().split(' ')[0];

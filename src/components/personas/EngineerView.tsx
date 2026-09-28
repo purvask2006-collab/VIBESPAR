@@ -84,8 +84,10 @@ export const EngineerView: React.FC<EngineerViewProps> = ({
   const throttle = controls?.throttle ?? 68;
   const altitude = controls?.altitude ?? 8400;
 
-  // Power output estimation (kW)
-  const powerKw = Math.round(((rpm / 3500) * (throttle / 100) * 84.5 * (airDensity / 1.225)) * 10) / 10;
+  // Power output estimation (kW): converted from live physics powerHp (1 HP = 0.7457 kW)
+  const powerKw = telemetry?.powerHp
+    ? Number((telemetry.powerHp * 0.7457).toFixed(1))
+    : Math.round(((rpm / 3500) * (throttle / 100) * 84.5 * (airDensity / 1.225)) * 10) / 10;
 
   // Fuel flow (kg/h): ~18.2 L/h * 0.72 kg/L = 13.1 kg/h
   const fuelKgHr = (telemetry.fuelFlow || 18.2) * 0.72;

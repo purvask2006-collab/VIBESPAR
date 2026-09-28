@@ -11,6 +11,16 @@ import {
   Gauge,
   Zap,
   Wind,
+  Scissors,
+  Sliders,
+  RotateCcw,
+  HelpCircle,
+  Info,
+  CheckCircle2,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp,
+  Split,
 } from 'lucide-react';
 
 interface Engine3DViewProps {
@@ -20,6 +30,13 @@ interface Engine3DViewProps {
   selectedSensor?: string | null;
   theme?: 'light' | 'dark';
   isPaused?: boolean;
+  visualMode?: VisualMode;
+  onVisualModeChange?: (mode: VisualMode) => void;
+  showCallouts?: boolean;
+  onToggleCallouts?: () => void;
+  onOpenArchitectureModal?: () => void;
+  selectedComponent?: string | null;
+  title?: string;
 }
 
 interface Sensor3DDef {
@@ -32,6 +49,8 @@ interface Sensor3DDef {
   getValue: (t: TelemetryData) => number | string;
 }
 
+export type VisualMode = 'CUTAWAY' | 'HEATMAP' | 'CROSS_SECTION' | 'THERMAL_IR' | 'VIBRATION' | 'MECHANICAL';
+
 export const Engine3DView: React.FC<Engine3DViewProps> = ({
   telemetry,
   activeFault,
@@ -39,7 +58,15 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
   selectedSensor,
   theme = 'light',
   isPaused = false,
+  visualMode: controlledVisualMode,
+  onVisualModeChange,
+  showCallouts,
+  onToggleCallouts,
+  onOpenArchitectureModal,
+  selectedComponent,
+  title = '3D DIGITAL TWIN • ROTAX 914-F',
 }) => {
+  const isLight = theme === 'light';
   const isPausedRef = useRef<boolean>(isPaused);
   useEffect(() => {
     isPausedRef.current = isPaused;
@@ -71,9 +98,41 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
 
   // Interactive View Modes & Camera State
   const [viewScope, setViewScope] = useState<'ENGINE_STAND' | 'NACELLE_MOUNT'>('ENGINE_STAND');
-  const [visualMode, setVisualMode] = useState<'CUTAWAY' | 'THERMAL_IR' | 'VIBRATION' | 'MECHANICAL'>('CUTAWAY');
+  const [internalVisualMode, setInternalVisualMode] = useState<VisualMode>(controlledVisualMode || 'CUTAWAY');
+  const visualMode = controlledVisualMode !== undefined ? controlledVisualMode : internalVisualMode;
+  const setVisualMode = (mode: VisualMode) => {
+    setInternalVisualMode(mode);
+    onVisualModeChange?.(mode);
+  };
+
+  useEffect(() => {
+    if (controlledVisualMode !== undefined) {
+      setInternalVisualMode(controlledVisualMode);
+    }
+  }, [controlledVisualMode]);
+
   const [hoveredSensor, setHoveredSensor] = useState<string | null>(null);
   const [activeCameraPreset, setActiveCameraPreset] = useState<string>('ISOMETRIC');
+
+  // Cross-Sectional Area CAD Plane State
+  const [crossSectionAxis, setCrossSectionAxis] = useState<'X' | 'Y' | 'Z'>('X');
+  const [crossSectionOffset, setCrossSectionOffset] = useState<number>(0.12);
+  const [crossSectionInverted, setCrossSectionInverted] = useState<boolean>(false);
+  const [showHeatmapIsotherms, setShowHeatmapIsotherms] = useState<boolean>(true);
+  const [showCrossSectionMetrics, setShowCrossSectionMetrics] = useState<boolean>(true);
+
+  // Synchronized refs for real-time 60fps render loop
+  const visualModeRef = useRef<VisualMode>(visualMode);
+  visualModeRef.current = visualMode;
+  const crossSectionAxisRef = useRef<'X' | 'Y' | 'Z'>(crossSectionAxis);
+  crossSectionAxisRef.current = crossSectionAxis;
+  const crossSectionOffsetRef = useRef<number>(crossSectionOffset);
+  crossSectionOffsetRef.current = crossSectionOffset;
+  const crossSectionInvertedRef = useRef<boolean>(crossSectionInverted);
+  crossSectionInvertedRef.current = crossSectionInverted;
+
+  const clipPlaneRef = useRef<THREE.Plane>(new THREE.Plane(new THREE.Vector3(-1, 0, 0), 0.12));
+  const crossSectionHelperRef = useRef<THREE.Group | null>(null);
 
   // Spherical camera orbit tracking
   const sphericalRef = useRef({ radius: 6.2, theta: Math.PI / 3.8, phi: Math.PI / 3.2 });
@@ -1015,8 +1074,45 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
     renderer.setSize(width, height);
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
+    renderer.localClippingEnabled = true;
     container.appendChild(renderer.domElement);
     rendererRef.current = renderer;
+
+    // Cross-Section CAD Guide Plane Helper Group
+    const crossSectionHelper = new THREE.Group();
+    crossSectionHelperRef.current = crossSectionHelper;
+    scene.add(crossSectionHelper);
+
+    const planeGridGeo = new THREE.PlaneGeometry(3.6, 2.8, 12, 10);
+    const planeGridMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.22,
+      side: THREE.DoubleSide,
+      wireframe: true,
+      depthWrite: false,
+    });
+    const planeGrid = new THREE.Mesh(planeGridGeo, planeGridMat);
+    crossSectionHelper.add(planeGrid);
+
+    const planeFillGeo = new THREE.PlaneGeometry(3.6, 2.8);
+    const planeFillMat = new THREE.MeshBasicMaterial({
+      color: 0x00f0ff,
+      transparent: true,
+      opacity: 0.06,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    const planeFill = new THREE.Mesh(planeFillGeo, planeFillMat);
+    crossSectionHelper.add(planeFill);
+
+    const edges = new THREE.EdgesGeometry(planeFillGeo);
+    const edgeLine = new THREE.LineSegments(
+      edges,
+      new THREE.LineBasicMaterial({ color: 0x00f0ff, linewidth: 2 })
+    );
+    crossSectionHelper.add(edgeLine);
+    crossSectionHelper.visible = false;
 
     // 9. Continuous Animation Loop (Synchronized with 4-Stroke Cycle & Telemetry)
     let animationFrameId: number;
@@ -1148,6 +1244,93 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
         }
       });
 
+      // E. Cross-Sectional Area CAD Clipping plane dynamic update
+      if (visualModeRef.current === 'CROSS_SECTION') {
+        const axis = crossSectionAxisRef.current;
+        const offset = crossSectionOffsetRef.current;
+        const inverted = crossSectionInvertedRef.current;
+
+        const normal = new THREE.Vector3();
+        if (axis === 'X') normal.set(inverted ? 1 : -1, 0, 0);
+        else if (axis === 'Y') normal.set(0, inverted ? 1 : -1, 0);
+        else normal.set(0, 0, inverted ? 1 : -1);
+
+        const constant = offset * (inverted ? -1 : 1);
+        clipPlaneRef.current.set(normal, constant);
+
+        if (rendererRef.current) {
+          rendererRef.current.clippingPlanes = [clipPlaneRef.current];
+        }
+
+        if (crossSectionHelperRef.current) {
+          crossSectionHelperRef.current.visible = true;
+          if (axis === 'X') {
+            crossSectionHelperRef.current.position.set(offset, 0, 0.2);
+            crossSectionHelperRef.current.rotation.set(0, Math.PI / 2, 0);
+          } else if (axis === 'Y') {
+            crossSectionHelperRef.current.position.set(0, offset, 0.2);
+            crossSectionHelperRef.current.rotation.set(Math.PI / 2, 0, 0);
+          } else {
+            crossSectionHelperRef.current.position.set(0, 0, offset + 0.2);
+            crossSectionHelperRef.current.rotation.set(0, 0, 0);
+          }
+        }
+      } else {
+        if (rendererRef.current && rendererRef.current.clippingPlanes.length > 0) {
+          rendererRef.current.clippingPlanes = [];
+        }
+        if (crossSectionHelperRef.current && crossSectionHelperRef.current.visible) {
+          crossSectionHelperRef.current.visible = false;
+        }
+      }
+
+      // F. Heat Map Dynamic Multi-Zone Temperature Gradient
+      if (visualModeRef.current === 'HEATMAP') {
+        const chtsLive = curTel?.chtCylinders || [curTel?.cht - 2, curTel?.cht, curTel?.cht + 3.5, curTel?.cht + 2];
+        const egtsLive = curTel?.egtCylinders || [curTel?.egt - 6, curTel?.egt, curTel?.egt + 8, curTel?.egt + 4];
+
+        cylinderBlocksRef.current.forEach((mesh, idx) => {
+          const temp = chtsLive[idx] || 160;
+          let hex = 0x10b981; // green
+          if (temp < 145) hex = 0x0284c7; // sky blue
+          else if (temp < 160) hex = 0x10b981;
+          else if (temp < 172) hex = 0xf59e0b; // amber
+          else if (temp < 182) hex = 0xf97316; // orange
+          else hex = 0xef4444; // alert red
+
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          mat.color.setHex(hex);
+          mat.emissive.setHex(hex);
+          mat.emissiveIntensity = temp > 175 ? 0.45 : 0.15;
+          mat.transparent = false;
+          mat.opacity = 1.0;
+        });
+
+        cylinderHeadsRef.current.forEach((mesh, idx) => {
+          const temp = chtsLive[idx] || 160;
+          let hex = 0x10b981;
+          if (temp < 145) hex = 0x0284c7;
+          else if (temp < 160) hex = 0x10b981;
+          else if (temp < 172) hex = 0xf59e0b;
+          else if (temp < 182) hex = 0xf97316;
+          else hex = 0xef4444;
+
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          mat.color.setHex(hex);
+          mat.emissive.setHex(hex);
+          mat.emissiveIntensity = temp > 175 ? 0.5 : 0.2;
+        });
+
+        exhaustPipesRef.current.forEach((mesh, idx) => {
+          const temp = egtsLive[idx % 4] || 740;
+          const heatColor = temp > 820 ? 0xff2d55 : temp > 760 ? 0xff9500 : 0xd97706;
+          const mat = mesh.material as THREE.MeshStandardMaterial;
+          mat.color.setHex(heatColor);
+          mat.emissive.setHex(heatColor);
+          mat.emissiveIntensity = 0.92;
+        });
+      }
+
       renderer.render(scene, camera);
     };
 
@@ -1187,6 +1370,8 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
 
     const isCutaway = visualMode === 'CUTAWAY';
     const isThermal = visualMode === 'THERMAL_IR';
+    const isHeatmap = visualMode === 'HEATMAP';
+    const isCrossSection = visualMode === 'CROSS_SECTION';
     const isVib = visualMode === 'VIBRATION';
 
     cylinderBlocksRef.current.forEach((mesh) => {
@@ -1195,18 +1380,36 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
         mat.transparent = true;
         mat.opacity = 0.32;
         mat.wireframe = false;
+        mat.color.setHex(theme === 'light' ? 0x64748b : 0x2d3a4b);
+        mat.emissive.setHex(0x000000);
+        mat.emissiveIntensity = 0;
+      } else if (isCrossSection) {
+        mat.transparent = false;
+        mat.opacity = 1.0;
+        mat.color.setHex(0x38bdf8); // crisp internal alloy cut tint
+        mat.emissive.setHex(0x0284c7);
+        mat.emissiveIntensity = 0.15;
+      } else if (isHeatmap) {
+        mat.transparent = false;
+        mat.opacity = 1.0;
       } else if (isThermal) {
         mat.transparent = false;
         mat.opacity = 1.0;
         mat.color.setHex(0xea580c);
+        mat.emissive.setHex(0xea580c);
+        mat.emissiveIntensity = 0.4;
       } else if (isVib) {
         mat.transparent = false;
         mat.opacity = 1.0;
         mat.color.setHex(0x0284c7);
+        mat.emissive.setHex(0x0284c7);
+        mat.emissiveIntensity = 0.25;
       } else {
         mat.transparent = false;
         mat.opacity = 1.0;
         mat.color.setHex(theme === 'light' ? 0x64748b : 0x2d3a4b);
+        mat.emissive.setHex(0x000000);
+        mat.emissiveIntensity = 0;
       }
     });
 
@@ -1214,11 +1417,11 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
     const egt = telemetry.egt || 720;
     exhaustPipesRef.current.forEach((mesh) => {
       const mat = mesh.material as THREE.MeshStandardMaterial;
-      if (isThermal || egt > 780) {
+      if (isThermal || isHeatmap || egt > 780) {
         const heatColor = egt > 820 ? 0xf43f5e : egt > 760 ? 0xe11d48 : 0xd97706;
         mat.color.setHex(heatColor);
         mat.emissive.setHex(heatColor);
-        mat.emissiveIntensity = isThermal ? 0.85 : 0.45;
+        mat.emissiveIntensity = isThermal || isHeatmap ? 0.88 : 0.45;
       } else {
         mat.color.setHex(0x78716c);
         mat.emissive.setHex(0x000000);
@@ -1249,102 +1452,184 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
   ];
 
   return (
-    <div className="w-full h-full flex flex-col bg-white rounded-xl border border-[#e5e9f0] relative overflow-hidden shadow-[0_2px_8px_rgba(0,0,0,0.03)]">
+    <div
+      className={`w-full h-full flex flex-col rounded-xl border relative overflow-hidden transition-colors ${
+        isLight
+          ? 'bg-white border-slate-200 text-slate-800 shadow-xs'
+          : 'bg-[#060c18] border-[#14233a] text-slate-100 shadow-lg'
+      }`}
+    >
       {/* 3D Viewport Header: Clean Aerospace Specification */}
-      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-b border-[#e5e9f0] bg-[#f8fafc] z-10">
+      <div
+        className={`flex flex-wrap items-center justify-between gap-2 px-3.5 py-2 border-b transition-colors ${
+          isLight
+            ? 'bg-slate-50/90 border-slate-200 text-slate-800'
+            : 'bg-[#070e1b] border-[#14233a] text-slate-100'
+        } z-10`}
+      >
         <div className="flex items-center space-x-2">
-          <Wrench className="w-4 h-4 text-[#00897b]" />
-          <h2 className="text-xs font-bold tracking-wider text-[#1a3a5c] uppercase">
-            3D DIGITAL TWIN • 4-STROKE TURBOCHARGED AERO ENGINE
+          <Wrench className="w-4 h-4 text-cyan-600 dark:text-cyan-400" />
+          <h2 className="text-xs font-chakra font-bold tracking-wider text-slate-900 dark:text-white uppercase">
+            {title}
           </h2>
-          <span className="hidden sm:inline text-[10px] px-2 py-0.5 rounded-full bg-teal-50 text-teal-800 border border-teal-200 font-semibold">
+          <span className="hidden sm:inline text-[10px] font-chakra font-bold px-2 py-0.5 rounded-full bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-800">
             REAL-TIME KINEMATICS
           </span>
+          {selectedComponent && (
+            <span className="px-2 py-0.5 rounded text-[10px] font-chakra font-bold tracking-wider uppercase bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-400">
+              FOCUS: {selectedComponent}
+            </span>
+          )}
         </div>
 
-        {/* View Scope Toggle */}
-        <div className="flex items-center space-x-1.5 text-xs">
-          <button
-            onClick={() => setViewScope('ENGINE_STAND')}
-            className={`px-2.5 py-1 rounded-md text-xs font-semibold uppercase transition-all ${
-              viewScope === 'ENGINE_STAND'
-                ? 'bg-[#1a3a5c] text-white shadow-xs'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            Engine Stand
-          </button>
-          <button
-            onClick={() => setViewScope('NACELLE_MOUNT')}
-            className={`px-2.5 py-1 rounded-md text-xs font-semibold uppercase transition-all ${
-              viewScope === 'NACELLE_MOUNT'
-                ? 'bg-[#1a3a5c] text-white shadow-xs'
-                : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
-            }`}
-          >
-            Airframe Nacelle
-          </button>
+        {/* View Controls: Scope Toggle + Labels Toggle + Tech Specs */}
+        <div className="flex items-center space-x-1.5 text-xs font-chakra">
+          <div className="flex items-center space-x-1">
+            <button
+              onClick={() => setViewScope('ENGINE_STAND')}
+              className={`px-2.5 py-1 rounded text-xs font-chakra font-bold uppercase transition-all ${
+                viewScope === 'ENGINE_STAND'
+                  ? isLight
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-cyan-600 text-white shadow-xs'
+                  : isLight
+                  ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                  : 'bg-[#0d1b2e] text-slate-300 border border-[#1e3455] hover:bg-[#152740]'
+              }`}
+            >
+              Engine Stand
+            </button>
+            <button
+              onClick={() => setViewScope('NACELLE_MOUNT')}
+              className={`px-2.5 py-1 rounded text-xs font-chakra font-bold uppercase transition-all ${
+                viewScope === 'NACELLE_MOUNT'
+                  ? isLight
+                    ? 'bg-slate-900 text-white shadow-xs'
+                    : 'bg-cyan-600 text-white shadow-xs'
+                  : isLight
+                  ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                  : 'bg-[#0d1b2e] text-slate-300 border border-[#1e3455] hover:bg-[#152740]'
+              }`}
+            >
+              Airframe Nacelle
+            </button>
+          </div>
+
+          {onToggleCallouts && (
+            <button
+              onClick={onToggleCallouts}
+              className={`px-2.5 py-1 rounded text-xs font-chakra font-bold uppercase transition-all border ${
+                showCallouts
+                  ? isLight
+                    ? 'bg-cyan-50 border-cyan-400 text-cyan-800 shadow-xs'
+                    : 'bg-cyan-950/60 border-cyan-500 text-cyan-300 shadow-xs'
+                  : isLight
+                  ? 'bg-white text-slate-700 border border-slate-300 hover:bg-slate-100'
+                  : 'bg-[#0d1b2e] text-slate-300 border-[#1e3455] hover:bg-[#152740]'
+              }`}
+              title="Toggle Subsystem Labels and Pointers"
+            >
+              {showCallouts ? 'Hide Labels' : 'Show Labels'}
+            </button>
+          )}
+
+          {onOpenArchitectureModal && (
+            <button
+              onClick={onOpenArchitectureModal}
+              className="px-2.5 py-1 rounded text-xs font-chakra font-bold uppercase transition-all bg-cyan-700 hover:bg-cyan-600 text-white shadow-xs flex items-center gap-1.5"
+              title="Open Digital Twin Architecture & Technical Documentation"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Tech Specs</span>
+            </button>
+          )}
         </div>
       </div>
 
       {/* 3D Canvas Container */}
       <div ref={containerRef} className="w-full flex-1 relative cursor-grab">
         {/* Visual Mode Selector Floating Pill */}
-        <div className="absolute top-2.5 left-2.5 z-20 flex flex-wrap gap-1 bg-white/95 dark:bg-[#070d18]/92 backdrop-blur-md p-1 rounded border border-slate-300 dark:border-[#1e3250] shadow-md text-[10px] font-chakra font-semibold max-w-[calc(100%-120px)] sm:max-w-none">
+        <div className="absolute top-2.5 left-2.5 z-20 flex flex-wrap gap-1 bg-white/95 dark:bg-[#070d18]/95 backdrop-blur-md p-1 rounded-lg border border-slate-300 dark:border-[#1e3250] shadow-md text-[10px] font-chakra font-semibold max-w-[calc(100%-120px)] sm:max-w-none">
           <button
             onClick={() => setVisualMode('CUTAWAY')}
-            className={`px-2 py-1 rounded flex items-center space-x-1 ${
+            className={`px-2 py-1 rounded flex items-center space-x-1 transition-all ${
               visualMode === 'CUTAWAY'
-                ? 'bg-cyan-600 text-white font-bold'
+                ? 'bg-cyan-700 text-white font-bold shadow-xs'
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
+            title="Internal Reciprocating Pistons & Conrods"
           >
             <Eye className="w-3 h-3" />
-            <span className="hidden sm:inline">CUTAWAY (PISTONS)</span>
-            <span className="sm:hidden">CUTAWAY</span>
+            <span className="hidden sm:inline">CUTAWAY</span>
           </button>
+
           <button
-            onClick={() => setVisualMode('THERMAL_IR')}
-            className={`px-2 py-1 rounded flex items-center space-x-1 ${
-              visualMode === 'THERMAL_IR'
-                ? 'bg-amber-600 text-white font-bold'
+            onClick={() => setVisualMode('HEATMAP')}
+            className={`px-2 py-1 rounded flex items-center space-x-1 transition-all ${
+              visualMode === 'HEATMAP'
+                ? 'bg-amber-600 text-white font-bold shadow-xs ring-1 ring-amber-400'
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
+            title="3D Multi-Zone Thermal Gradient & Hotspot Distribution"
           >
-            <Flame className="w-3 h-3" />
-            <span className="hidden sm:inline">THERMAL IR</span>
-            <span className="sm:hidden">THERMAL</span>
+            <Flame className="w-3 h-3 text-amber-300" />
+            <span className="font-bold">HEAT MAP</span>
           </button>
+
           <button
-            onClick={() => setVisualMode('VIBRATION')}
-            className={`px-2 py-1 rounded flex items-center space-x-1 ${
-              visualMode === 'VIBRATION'
-                ? 'bg-emerald-600 text-white font-bold'
+            onClick={() => setVisualMode('CROSS_SECTION')}
+            className={`px-2 py-1 rounded flex items-center space-x-1 transition-all ${
+              visualMode === 'CROSS_SECTION'
+                ? 'bg-teal-700 text-white font-bold shadow-xs ring-1 ring-teal-400'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+            title="Interactive CAD Slicing Plane & Geometric Cross-Sectional Areas"
+          >
+            <Scissors className="w-3 h-3 text-teal-300" />
+            <span className="font-bold">CROSS SECTION</span>
+          </button>
+
+          <button
+            onClick={() => setVisualMode('THERMAL_IR')}
+            className={`px-2 py-1 rounded flex items-center space-x-1 transition-all ${
+              visualMode === 'THERMAL_IR'
+                ? 'bg-rose-700 text-white font-bold shadow-xs'
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Activity className="w-3 h-3" />
-            <span className="hidden sm:inline">VIBRATION STRAIN</span>
-            <span className="sm:hidden">VIB</span>
+            <span className="hidden sm:inline">THERMAL IR</span>
           </button>
+
+          <button
+            onClick={() => setVisualMode('VIBRATION')}
+            className={`px-2 py-1 rounded flex items-center space-x-1 transition-all ${
+              visualMode === 'VIBRATION'
+                ? 'bg-emerald-700 text-white font-bold shadow-xs'
+                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Zap className="w-3 h-3" />
+            <span className="hidden sm:inline">VIB STRAIN</span>
+          </button>
+
           <button
             onClick={() => setVisualMode('MECHANICAL')}
-            className={`px-2 py-1 rounded flex items-center space-x-1 ${
+            className={`px-2 py-1 rounded flex items-center space-x-1 transition-all ${
               visualMode === 'MECHANICAL'
-                ? 'bg-slate-700 text-white font-bold'
+                ? 'bg-slate-800 text-white font-bold shadow-xs'
                 : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
             }`}
           >
             <Layers className="w-3 h-3" />
             <span className="hidden sm:inline">SOLID ALLOY</span>
-            <span className="sm:hidden">ALLOY</span>
           </button>
         </div>
 
         {/* Camera Quick-Angle Presets */}
-        <div className="absolute top-11 sm:top-12 left-2.5 z-20 flex flex-wrap gap-1 bg-white/90 dark:bg-[#070d18]/85 backdrop-blur-md p-1 rounded border border-slate-200 dark:border-slate-800 shadow text-[9px] font-chakra">
-          <span className="px-1 py-0.5 text-slate-500 font-bold flex items-center gap-0.5">
-            <Camera className="w-2.5 h-2.5" />
+        <div className="absolute top-11 sm:top-12 left-2.5 z-20 flex flex-wrap gap-1 bg-white/95 dark:bg-[#070d18]/90 backdrop-blur-md p-1 rounded border border-slate-200 dark:border-slate-800 shadow text-[9px] font-chakra">
+          <span className="px-1 py-0.5 text-slate-600 dark:text-slate-400 font-bold flex items-center gap-0.5">
+            <Camera className="w-2.5 h-2.5 text-cyan-600" />
             <span className="hidden sm:inline">PRESETS:</span>
           </span>
           {(['ISOMETRIC', 'CUTAWAY', 'TURBO', 'CYLINDERS', 'PROP'] as const).map((preset) => (
@@ -1354,7 +1639,7 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
               className={`px-1.5 py-0.5 rounded font-bold transition-colors ${
                 activeCameraPreset === preset
                   ? 'bg-cyan-700 text-white'
-                  : 'text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-800'
+                  : 'text-slate-800 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-800'
               }`}
             >
               {preset}
@@ -1362,39 +1647,207 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
           ))}
         </div>
 
-        {/* Real-Time Live Multi-Cylinder Engine Telemetry HUD (Floating & Compact to prevent canvas overlap) */}
-        <div className="absolute top-2.5 right-2.5 z-20 bg-white/95 dark:bg-[#070d18]/92 backdrop-blur-md p-2 rounded border border-slate-300 dark:border-[#1e3250] shadow-lg text-xs font-tech space-y-1.5 select-none w-60 max-w-[calc(100vw-36px)]">
-          <div className="flex justify-between items-center text-[10px] font-chakra font-bold text-slate-600 dark:text-slate-300 border-b border-slate-200 dark:border-slate-800 pb-1">
-            <span className="flex items-center gap-1">
-              <Gauge className="w-3 h-3 text-cyan-600" />
+        {/* ------------------------------------------------------------- */}
+        {/* DEDICATED OVERLAY 1: HEAT MAP ISOTHERM LEGEND & HOTSPOT HUD    */}
+        {/* ------------------------------------------------------------- */}
+        {visualMode === 'HEATMAP' && (
+          <div className="absolute bottom-9 left-2.5 z-20 bg-white/95 dark:bg-[#070d18]/95 backdrop-blur-md p-3 rounded-xl border border-amber-500/60 shadow-xl max-w-sm sm:max-w-md animate-in fade-in duration-200">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center space-x-1.5">
+                <Flame className="w-4 h-4 text-amber-500 animate-pulse" />
+                <span className="font-chakra font-bold text-xs text-slate-900 dark:text-white uppercase tracking-wide">
+                  3D Engine Thermal Heat Map
+                </span>
+              </div>
+              <span className="text-[10px] font-chakra font-semibold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-500/30">
+                MULTI-ZONE ISOTHERMS
+              </span>
+            </div>
+
+            {/* Continuous Thermal Color Gradient Legend Bar */}
+            <div className="mt-2 space-y-1">
+              <div className="flex justify-between text-[9px] font-chakra font-bold text-slate-700 dark:text-slate-300">
+                <span>30°C (Ambient)</span>
+                <span>110°C (Oil)</span>
+                <span>175°C (CHT Max)</span>
+                <span>850°C (Exhaust)</span>
+              </div>
+              <div className="h-3 w-full rounded-sm overflow-hidden bg-gradient-to-r from-sky-600 via-teal-500 via-emerald-500 via-amber-400 via-orange-500 to-rose-600 shadow-inner" />
+            </div>
+
+            {/* Hotspot Readout Card */}
+            <div className="mt-2.5 grid grid-cols-2 gap-2 text-xs font-sans">
+              <div className="p-2 rounded bg-amber-50/80 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/50">
+                <div className="text-[10px] font-chakra font-bold text-amber-800 dark:text-amber-400 uppercase">
+                  Critical Hotspot
+                </div>
+                <div className="text-sm font-bold font-tech text-slate-900 dark:text-white mt-0.5">
+                  Cylinder #2: {chts[1]}°C
+                </div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  {chts[1] > 175 ? '⚠️ Thermal Limit Exceeded' : '✓ Operating in Envelope'}
+                </div>
+              </div>
+
+              <div className="p-2 rounded bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[10px] font-chakra font-bold text-slate-700 dark:text-slate-300 uppercase">
+                  Convective Heat Flux (q″)
+                </div>
+                <div className="text-sm font-bold font-tech text-cyan-700 dark:text-cyan-400 mt-0.5">
+                  14.8 kW/m²
+                </div>
+                <div className="text-[10px] text-slate-600 dark:text-slate-400 mt-0.5">
+                  Fin Biot Number: Bi = 0.082
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ------------------------------------------------------------- */}
+        {/* DEDICATED OVERLAY 2: CROSS-SECTIONAL AREA CAD SLICER HUD      */}
+        {/* ------------------------------------------------------------- */}
+        {visualMode === 'CROSS_SECTION' && (
+          <div className="absolute bottom-9 left-2.5 z-20 bg-white/95 dark:bg-[#070d18]/95 backdrop-blur-md p-3 rounded-xl border border-teal-500/60 shadow-xl max-w-sm sm:max-w-md animate-in fade-in duration-200">
+            <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-800">
+              <div className="flex items-center space-x-1.5">
+                <Scissors className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span className="font-chakra font-bold text-xs text-slate-900 dark:text-white uppercase tracking-wide">
+                  Cross-Sectional Area CAD Slicer
+                </span>
+              </div>
+              <span className="text-[10px] font-chakra font-semibold px-1.5 py-0.5 rounded bg-teal-500/10 text-teal-700 dark:text-teal-400 border border-teal-500/30">
+                {crossSectionAxis}-PLANE CUT
+              </span>
+            </div>
+
+            {/* Slicing Plane Selection & Invert Actions */}
+            <div className="mt-2 flex items-center justify-between gap-1.5">
+              <div className="flex items-center space-x-1 text-[10px] font-chakra font-bold">
+                {(['X', 'Y', 'Z'] as const).map((axis) => (
+                  <button
+                    key={axis}
+                    onClick={() => setCrossSectionAxis(axis)}
+                    className={`px-2 py-1 rounded transition-all ${
+                      crossSectionAxis === axis
+                        ? 'bg-teal-700 text-white font-bold shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+                    }`}
+                  >
+                    {axis === 'X' ? 'Sagittal (X)' : axis === 'Y' ? 'Axial (Y)' : 'Frontal (Z)'}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex items-center space-x-1">
+                <button
+                  onClick={() => setCrossSectionInverted(!crossSectionInverted)}
+                  className={`px-2 py-1 rounded text-[10px] font-chakra font-bold border transition-colors ${
+                    crossSectionInverted
+                      ? 'bg-amber-600 text-white border-amber-600'
+                      : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-300 dark:border-slate-700'
+                  }`}
+                  title="Invert Slice Direction"
+                >
+                  <Split className="w-3 h-3" />
+                </button>
+                <button
+                  onClick={() => setCrossSectionOffset(0.12)}
+                  className="px-2 py-1 rounded text-[10px] font-chakra font-bold bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-300 dark:border-slate-700 hover:bg-slate-100"
+                  title="Reset Slicing Plane to Datum"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                </button>
+              </div>
+            </div>
+
+            {/* Slicing Plane Offset Slider */}
+            <div className="mt-2.5 space-y-1">
+              <div className="flex justify-between text-[10px] font-chakra font-bold text-slate-700 dark:text-slate-300">
+                <span>SLICE PLANE OFFSET:</span>
+                <span className="font-tech text-teal-700 dark:text-teal-400">
+                  {(crossSectionOffset * 1000).toFixed(0)} mm
+                </span>
+              </div>
+              <input
+                type="range"
+                min="-0.85"
+                max="0.85"
+                step="0.02"
+                value={crossSectionOffset}
+                onChange={(e) => setCrossSectionOffset(parseFloat(e.target.value))}
+                className="w-full accent-teal-600 cursor-pointer h-1.5 bg-slate-200 dark:bg-slate-700 rounded-lg"
+              />
+            </div>
+
+            {/* Real Computed Cross-Sectional Geometric Flow Areas */}
+            <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-center text-xs font-sans">
+              <div className="p-1.5 rounded bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[9px] font-chakra font-semibold text-slate-600 dark:text-slate-400">
+                  Cylinder Bore
+                </div>
+                <div className="font-tech font-bold text-slate-900 dark:text-white text-xs mt-0.5">
+                  49.64 cm²
+                </div>
+                <div className="text-[8px] text-slate-500">Ø 79.5 mm</div>
+              </div>
+
+              <div className="p-1.5 rounded bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[9px] font-chakra font-semibold text-slate-600 dark:text-slate-400">
+                  Intake Throat
+                </div>
+                <div className="font-tech font-bold text-emerald-600 dark:text-emerald-400 text-xs mt-0.5">
+                  7.07 cm²
+                </div>
+                <div className="text-[8px] text-slate-500">Ø 30.0 mm</div>
+              </div>
+
+              <div className="p-1.5 rounded bg-slate-100 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700">
+                <div className="text-[9px] font-chakra font-semibold text-slate-600 dark:text-slate-400">
+                  Oil Gallery
+                </div>
+                <div className="font-tech font-bold text-amber-600 dark:text-amber-400 text-xs mt-0.5">
+                  0.79 cm²
+                </div>
+                <div className="text-[8px] text-slate-500">Ø 10.0 mm</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Real-Time Live Multi-Cylinder Engine Telemetry HUD (High-Contrast & Aligned) */}
+        <div className="absolute top-2.5 right-2.5 z-20 bg-white/95 dark:bg-[#070d18]/95 backdrop-blur-md p-2.5 rounded-xl border border-slate-300 dark:border-[#1e3250] shadow-xl text-xs font-tech space-y-2 select-none w-64 max-w-[calc(100vw-36px)]">
+          <div className="flex justify-between items-center text-[10px] font-chakra font-bold text-slate-700 dark:text-slate-200 border-b border-slate-200 dark:border-slate-800 pb-1.5">
+            <span className="flex items-center gap-1.5">
+              <Gauge className="w-3.5 h-3.5 text-cyan-600" />
               ROTAX 914-F STATUS
             </span>
-            <span className="text-emerald-600 dark:text-emerald-400">50Hz HWIL</span>
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold">50Hz HWIL</span>
           </div>
 
           {/* 4-Cylinder Head Temperatures (CHT 1, 2, 3, 4) */}
           <div>
-            <div className="flex justify-between text-[9px] font-chakra text-slate-500 dark:text-slate-400">
+            <div className="flex justify-between text-[10px] font-chakra font-bold text-slate-600 dark:text-slate-300">
               <span>CYLINDER HEAD TEMPS (°C):</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">MAX 175°C</span>
+              <span className="text-slate-900 dark:text-slate-100">MAX 175°C</span>
             </div>
-            <div className="grid grid-cols-4 gap-1 mt-0.5">
+            <div className="grid grid-cols-4 gap-1.5 mt-1">
               {chts.map((temp, idx) => {
                 const isOver = temp > 175;
                 const isWarn = temp > 160;
                 return (
                   <div
                     key={idx}
-                    className={`p-0.5 rounded text-center border font-chakra text-[9px] ${
+                    className={`p-1 rounded text-center border font-chakra text-[10px] ${
                       isOver
-                        ? 'bg-rose-500/20 border-rose-500 text-rose-600 dark:text-rose-400 font-bold animate-pulse'
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-700 dark:text-rose-400 font-bold animate-pulse'
                         : isWarn
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-400 font-bold'
-                        : 'bg-slate-100 dark:bg-slate-800/60 border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-400 font-bold'
+                        : 'bg-slate-100 dark:bg-slate-800/80 border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100'
                     }`}
                   >
-                    <div className="text-[7px] text-slate-500 dark:text-slate-400 font-semibold">C{idx + 1}</div>
-                    <div className="font-bold">{temp}°</div>
+                    <div className="text-[8px] text-slate-500 dark:text-slate-400 font-bold">C{idx + 1}</div>
+                    <div className="font-tech font-bold">{temp}°</div>
                   </div>
                 );
               })}
@@ -1403,27 +1856,27 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
 
           {/* 4-Cylinder Exhaust Gas Temperatures (EGT 1, 2, 3, 4) */}
           <div>
-            <div className="flex justify-between text-[9px] font-chakra text-slate-500 dark:text-slate-400">
+            <div className="flex justify-between text-[10px] font-chakra font-bold text-slate-600 dark:text-slate-300">
               <span>EXHAUST GAS TEMPS (°C):</span>
-              <span className="font-bold text-slate-700 dark:text-slate-300">MAX 850°C</span>
+              <span className="text-slate-900 dark:text-slate-100">MAX 850°C</span>
             </div>
-            <div className="grid grid-cols-4 gap-1 mt-0.5">
+            <div className="grid grid-cols-4 gap-1.5 mt-1">
               {egts.map((temp, idx) => {
                 const isOver = temp > 850;
                 const isWarn = temp > 800;
                 return (
                   <div
                     key={idx}
-                    className={`p-0.5 rounded text-center border font-chakra text-[9px] ${
+                    className={`p-1 rounded text-center border font-chakra text-[10px] ${
                       isOver
-                        ? 'bg-rose-500/20 border-rose-500 text-rose-600 dark:text-rose-400 font-bold'
+                        ? 'bg-rose-500/20 border-rose-500 text-rose-700 dark:text-rose-400 font-bold'
                         : isWarn
-                        ? 'bg-amber-500/20 border-amber-500 text-amber-600 dark:text-amber-400 font-bold'
-                        : 'bg-slate-100 dark:bg-slate-800/40 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-700 dark:text-amber-400 font-bold'
+                        : 'bg-slate-100 dark:bg-slate-800/60 border-slate-300 dark:border-slate-700 text-slate-800 dark:text-slate-200'
                     }`}
                   >
-                    <div className="text-[7px] text-slate-500">E{idx + 1}</div>
-                    <div>{temp}°</div>
+                    <div className="text-[8px] text-slate-500 font-bold">E{idx + 1}</div>
+                    <div className="font-tech font-bold">{temp}°</div>
                   </div>
                 );
               })}
@@ -1431,46 +1884,46 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
           </div>
 
           {/* Core Propulsion Dynamics */}
-          <div className="pt-1 border-t border-slate-200 dark:border-slate-800 space-y-0.5 text-[10px]">
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400 font-chakra">RPM:</span>
-              <span className="font-bold text-cyan-700 dark:text-cyan-400">{telemetry.rpm}</span>
+          <div className="pt-1.5 border-t border-slate-200 dark:border-slate-800 space-y-1 text-[11px] font-sans">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400 font-chakra font-semibold">PROP RPM:</span>
+              <span className="font-bold font-tech text-cyan-700 dark:text-cyan-400">{telemetry.rpm}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400 font-chakra">BOOST:</span>
-              <span className="font-bold text-purple-700 dark:text-purple-400">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400 font-chakra font-semibold">MAP / BOOST:</span>
+              <span className="font-bold font-tech text-purple-700 dark:text-purple-400">
                 {telemetry.manifoldPressure} inHg (+{telemetry.turboBoostBar || 0.22} bar)
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400 font-chakra">PITCH / POWER:</span>
-              <span className="font-bold text-slate-900 dark:text-slate-100">
-                {telemetry.propellerPitchDeg || 22}° // {telemetry.powerHp} HP
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400 font-chakra font-semibold">POWER & PITCH:</span>
+              <span className="font-bold font-tech text-slate-900 dark:text-white">
+                {telemetry.powerHp} HP @ {telemetry.propellerPitchDeg || 22}°
               </span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-600 dark:text-slate-400 font-chakra">OIL P/T:</span>
-              <span className="font-bold text-slate-900 dark:text-slate-100">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-600 dark:text-slate-400 font-chakra font-semibold">OIL P / T:</span>
+              <span className="font-bold font-tech text-slate-900 dark:text-white">
                 {telemetry.oilPressure} bar / {telemetry.oilTemperature}°C
               </span>
             </div>
           </div>
         </div>
 
-        {/* Hovered / Clicked Sensor Inspection Popup (Positioned safely above bottom controls) */}
+        {/* Hovered / Clicked Sensor Inspection Popup */}
         {hoveredSensor && (
-          <div className="absolute bottom-9 left-2.5 z-20 bg-white/95 dark:bg-[#070d18]/95 backdrop-blur-md p-2 rounded border border-cyan-500 shadow-xl text-xs font-tech pointer-events-none max-w-xs">
+          <div className="absolute bottom-9 left-2.5 z-20 bg-white/95 dark:bg-[#070d18]/95 backdrop-blur-md p-2.5 rounded-lg border border-cyan-500 shadow-xl text-xs font-tech pointer-events-none max-w-xs animate-in fade-in duration-100">
             {(() => {
               const s = sensors.find((x) => x.id === hoveredSensor);
               if (!s) return null;
               return (
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   <div className="flex items-center space-x-1.5">
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: s.color }} />
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: s.color }} />
                     <span className="font-chakra font-bold text-slate-900 dark:text-white uppercase text-[11px]">{s.shortName}:</span>
                     <span className="font-bold text-cyan-700 dark:text-cyan-400 text-xs">{s.getValue(telemetry)}</span>
                   </div>
-                  <p className="text-[9px] text-slate-600 dark:text-slate-400 font-chakra leading-tight">{s.name}</p>
+                  <p className="text-[10px] text-slate-700 dark:text-slate-300 font-sans leading-tight">{s.name}</p>
                 </div>
               );
             })()}
@@ -1478,10 +1931,11 @@ export const Engine3DView: React.FC<Engine3DViewProps> = ({
         )}
 
         {/* 3D Viewport Controls Hint */}
-        <div className="absolute bottom-2 left-2.5 z-10 text-[8px] sm:text-[9px] font-tech text-slate-500 dark:text-slate-400 bg-white/85 dark:bg-black/65 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-800 pointer-events-none uppercase">
-          DRAG TO ORBIT • SCROLL TO ZOOM • PRESET ANGLES
+        <div className="absolute bottom-2 left-2.5 z-10 text-[9px] font-tech text-slate-600 dark:text-slate-300 bg-white/90 dark:bg-black/80 px-2 py-0.5 rounded border border-slate-300 dark:border-slate-800 pointer-events-none uppercase tracking-wide">
+          DRAG TO ORBIT • SCROLL TO ZOOM • PRESET ANGLES • CAD CROSS-SECTION & HEAT MAP ACTIVE
         </div>
       </div>
     </div>
   );
 };
+
